@@ -1,3 +1,12 @@
+# Local secrets / environment
+.env
+
+# Maven build output
+target/
+
+# IDE
+.idea/
+
 # Compiled class file
 *.class
 

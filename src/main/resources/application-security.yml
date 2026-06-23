@@ -1,0 +1,43 @@
+# OAuth2 / OIDC provider registrations.
+#
+# Authentication is fully pluggable: each provider is just a registration block below. Adding a new
+# provider (e.g. Google) requires NO code change - add a registration + provider block here and the
+# login page renders a button for it automatically.
+#
+# Secrets come from the local .env file (see .env.example). Explicit endpoint URIs are used instead
+# of issuer discovery so the application can start without contacting the identity provider.
+spring:
+  security:
+    oauth2:
+      client:
+        registration:
+          # --- Microsoft 365 / Entra ID (Expondo) ---
+          azure:
+            client-name: Microsoft 365
+            client-id: ${AZURE_CLIENT_ID:changeme}
+            client-secret: ${AZURE_CLIENT_SECRET:changeme}
+            authorization-grant-type: authorization_code
+            # Single fixed callback for all providers; must match SecurityConfig.CALLBACK_PATH.
+            redirect-uri: "{baseUrl}/auth/callback"
+            scope:
+              - openid
+              - profile
+              - email
+
+          # --- Google (example: uncomment, add GOOGLE_* to .env, and it appears on the login page) ---
+          # google:
+          #   client-name: Google
+          #   client-id: ${GOOGLE_CLIENT_ID}
+          #   client-secret: ${GOOGLE_CLIENT_SECRET}
+          #   redirect-uri: "{baseUrl}/auth/callback"
+          #   scope:
+          #     - openid
+          #     - profile
+          #     - email
+
+        provider:
+          azure:
+            authorization-uri: https://login.microsoftonline.com/${AZURE_TENANT_ID:common}/oauth2/v2.0/authorize
+            token-uri: https://login.microsoftonline.com/${AZURE_TENANT_ID:common}/oauth2/v2.0/token
+            jwk-set-uri: https://login.microsoftonline.com/${AZURE_TENANT_ID:common}/discovery/v2.0/keys
+            user-name-attribute: name

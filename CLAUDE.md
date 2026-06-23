@@ -1,3 +1,10 @@
+# HowDoWeDo - Survey tool
+
+## Software Scope and Purpose
+
+This projects represents a software to create, conduct and analyze surveys. Main focus is employee surveys that 
+can be submitted anonymously if required.
+
 ### Tech stack
 
 Java, Spring Boot, MySQL, Thymeleaf
@@ -32,9 +39,10 @@ Java, Spring Boot, MySQL, Thymeleaf
 - Always use Maven for dependency management.
 - Always create test cases for the generated code both positive and negative.
 - Minimize the amount of code generated.
-- Use `sandbox27.howarewedoing` as the group ID for the Maven project and base Java package.
+- Use `sandbox27.howdowedo` as the group ID for the Maven project and base Java package.
 - Do not use the Lombok library.
 - Generate the Docker Compose file to run all components used by the application.
-- use a domain-based folder structure that contains entities, repositores, services and dtos for the respective domains
+- use a domain-based folder structure. Every domain is a folder (package) that contains entities, repositores, services and dtos for the respective domain
 - use Java records for DTOs
 - use a common/errors folder for common Exceptions and handlers
+- use Thymeleaf/Bootstrap CSS for the UI

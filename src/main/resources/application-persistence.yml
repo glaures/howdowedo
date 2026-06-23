@@ -1,0 +1,14 @@
+# Persistence configuration. Credentials come from the local .env file (see .env.example) and match
+# the MySQL service in docker-compose.yml. Defaults are dev-friendly so `docker compose up db` works
+# out of the box.
+spring:
+  datasource:
+    url: jdbc:mysql://${MYSQL_HOST:localhost}:${MYSQL_PORT:3306}/${MYSQL_DATABASE:howdowedo}
+    username: ${MYSQL_USER:howdowedo}
+    password: ${MYSQL_PASSWORD:howdowedo}
+  jpa:
+    hibernate:
+      ddl-auto: update
+    open-in-view: false
+    properties:
+      hibernate.dialect: org.hibernate.dialect.MySQLDialect

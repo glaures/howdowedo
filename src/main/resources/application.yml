@@ -1,0 +1,21 @@
+spring:
+  application:
+    name: howdowedo
+  # Load secrets from the local .env (KEY=VALUE), then the OAuth2 provider registrations.
+  # The .env file is optional so the app also starts from real environment variables.
+  config:
+    import:
+      - optional:file:.env[.properties]
+      - classpath:application-security.yml
+      - classpath:application-persistence.yml
+      - classpath:application-mail.yml
+
+# Public base URL used to build survey response links in invitation emails.
+app:
+  base-url: ${APP_BASE_URL:http://localhost:8081}
+  mail:
+    from: ${MAIL_FROM:no-reply@howdowedo.local}
+
+server:
+  # Defaults to 8081 for local testing; override with SERVER_PORT in other environments.
+  port: ${SERVER_PORT:8081}
