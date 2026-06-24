@@ -6,6 +6,21 @@ spring:
     basename: messages
     encoding: UTF-8
     fallback-to-system-locale: false
+  # Cache static assets in the browser so the logo/CSS are not re-fetched on every page navigation.
+  # CSS/JS get a content hash in their URL (via @{...}) so a changed file busts the cache
+  # automatically; the logo keeps its plain path (it is on a security-permitted path) and relies on
+  # the max-age below.
+  web:
+    resources:
+      cache:
+        cachecontrol:
+          max-age: 30d
+          cache-public: true
+      chain:
+        strategy:
+          content:
+            enabled: true
+            paths: /css/**, /js/**
   # Persist HTTP sessions in the database so a logged-in user stays signed in across application
   # restarts. The schema scripts are idempotent (see resources/session), so `always` is safe to
   # run on every startup; @@platform@@ resolves to mysql (production) or h2 (tests).
@@ -32,6 +47,12 @@ app:
     # file is optional and not part of the repository; if it is missing the seeder does nothing.
     survey: ${SEED_SURVEY:false}
     survey-file: ${SEED_SURVEY_FILE:seed/seed-survey.tsv}
+    # Dev aid: fill surveys with anonymous sample responses so the reports can be tried out. Without a
+    # survey-id it targets every survey that has questions but no responses yet (idempotent on restart).
+    sample-responses:
+      enabled: ${SEED_SAMPLE_RESPONSES:false}
+      count: ${SEED_SAMPLE_RESPONSES_COUNT:40}
+      survey-id: ${SEED_SAMPLE_RESPONSES_SURVEY_ID:}
 
 server:
   # Defaults to 8081 for local testing; override with SERVER_PORT in other environments.

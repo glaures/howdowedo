@@ -38,7 +38,7 @@
             <td th:text="${entry.turnout.responded} + ' / ' + ${entry.turnout.invited}">0 / 0</td>
             <td class="text-end">
                 <a class="btn btn-sm btn-outline-secondary" th:if="${entry.canAnalyze}"
-                   th:href="@{'/surveys/' + ${entry.survey.id} + '/results'}"
+                   th:href="@{'/surveys/' + ${entry.survey.id} + '/report'}"
                    th:text="#{surveys.analyze}">Analyze</a>
                 <a class="btn btn-sm btn-outline-secondary" th:if="${entry.canAdminister}"
                    th:href="@{'/surveys/' + ${entry.survey.id} + '/permissions'}"

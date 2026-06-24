@@ -154,6 +154,27 @@ class SurveyManagementControllerTest {
     }
 
     @Test
+    void addingAQuestionFromAScaleSnapshotsItsPerOptionScores() throws Exception {
+        User manager = provisionManager();
+        Scale agreement = scaleService.create("Signed", null,
+                List.of(new ScaleValue("No", -1), new ScaleValue("Yes", 1)));
+        Survey survey = surveyService.createSurvey(manager.getId(),
+                new CreateSurveyRequest("Engagement", "d", 1, null));
+        Section section = surveyService.addSection(survey.getId(), "General");
+
+        mockMvc.perform(post("/surveys/{id}/sections/{sectionId}/questions", survey.getId(), section.getId())
+                        .param("text", "Engaged?")
+                        .param("type", "SCALE")
+                        .param("scaleId", String.valueOf(agreement.getId()))
+                        .with(oauth2Login().authorities(MANAGER)).with(csrf()))
+                .andExpect(status().is3xxRedirection());
+
+        Question question = surveyService.get(survey.getId()).getQuestions().get(0);
+        assertThat(question.getOptions()).containsExactly("No", "Yes");
+        assertThat(question.getOptionScores()).containsEntry("No", -1).containsEntry("Yes", 1);
+    }
+
+    @Test
     void managerOpensSurveySendsInvitationsThenCloses() throws Exception {
         User manager = provisionManager();
         Survey survey = surveyService.createSurvey(manager.getId(),
@@ -424,7 +445,7 @@ class SurveyManagementControllerTest {
         User grantee = provisionUser("grantee");
         accessService.setPermissions(survey.getId(), grantee.getId(), Set.of(SurveyPermission.EDIT));
 
-        mockMvc.perform(get("/surveys/{id}/results", survey.getId())
+        mockMvc.perform(get("/surveys/{id}/report", survey.getId())
                         .header("Referer", "http://localhost/surveys/" + survey.getId())
                         .with(oidcLogin().authorities(PLAIN_USER).idToken(t -> t.subject("grantee"))))
                 .andExpect(status().is3xxRedirection())

@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html th:lang="${#locale.language}" xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{fragments/layout :: head(#{report.title})}"></head>
+<body>
+<nav th:replace="~{fragments/layout :: navbar}"></nav>
+<div th:replace="~{fragments/layout :: flash}"></div>
+<div class="container py-4">
+    <a class="small" th:href="@{'/surveys/' + ${survey.id}}" th:text="#{results.backToSurvey}">&larr; Survey</a>
+    <h1 class="h4 mt-1 mb-1" th:text="${report.title}">Survey</h1>
+    <p class="text-muted" th:text="#{results.responseCount(${report.responseCount})}">0 responses</p>
+
+    <!-- One block per section, mirroring the survey's own structure -->
+    <section th:each="section : ${report.sections}" class="mb-4">
+        <h2 class="h5 mb-2" th:text="${section.title}">Section</h2>
+        <div class="card mb-3" th:each="q : ${section.questions}">
+        <div class="card-body">
+            <div class="row align-items-center g-3">
+                <div class="col-md-5">
+                    <div class="fw-semibold" th:text="${q.text}">Question</div>
+                    <span class="badge text-bg-light" th:text="#{'questiontype.' + ${q.type}}">TYPE</span>
+                </div>
+                <div class="col-md-7">
+                    <!-- Favorable bar for scored scales: negative | neutral | positive, summing to 100% -->
+                    <div th:if="${q.visualization.name() == 'FAVORABLE'}" th:with="f=${q.favorable}"
+                         class="favorbar"
+                         th:title="#{report.favorable.legend(${f.supporters}, ${f.neutral}, ${f.detractors})}">
+                        <div class="favorbar-seg favorbar-neg" th:if="${f.detractorPercent > 0}"
+                             th:style="'width:' + ${f.detractorPercent} + '%'"
+                             th:text="${f.detractorPercent} + '%'">25%</div>
+                        <div class="favorbar-seg favorbar-neutral" th:if="${f.neutralPercent > 0}"
+                             th:style="'width:' + ${f.neutralPercent} + '%'"
+                             th:text="${f.neutralPercent} + '%'">25%</div>
+                        <div class="favorbar-seg favorbar-pos" th:if="${f.favorablePercent > 0}"
+                             th:style="'width:' + ${f.favorablePercent} + '%'"
+                             th:text="${f.favorablePercent} + '%'">50%</div>
+                    </div>
+
+                    <!-- Distribution: share per option -->
+                    <div th:if="${q.visualization.name() == 'DISTRIBUTION'}">
+                        <div class="mb-2" th:each="d : ${q.distribution}">
+                            <div class="d-flex justify-content-between small">
+                                <span th:text="${d.label}">Option</span>
+                                <span class="text-muted" th:text="${d.percent} + '% (' + ${d.count} + ')'">0%</span>
+                            </div>
+                            <div class="progress" role="progressbar" style="height: 8px;">
+                                <div class="progress-bar" th:style="'width:' + ${d.percent} + '%'"></div>
+                            </div>
+                        </div>
+                        <p th:if="${q.distribution.isEmpty()}" class="text-muted small mb-0"
+                           th:text="#{results.noAnswers}">No answers yet.</p>
+                    </div>
+
+                    <!-- Free text: list the anonymous answers -->
+                    <div th:if="${q.visualization.name() == 'TEXT'}">
+                        <ul class="list-group">
+                            <li class="list-group-item" th:each="a : ${q.textAnswers}" th:text="${a}">Answer</li>
+                            <li class="list-group-item text-muted" th:if="${q.textAnswers.isEmpty()}"
+                                th:text="#{results.noAnswers}">No answers yet.</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Anonymous free-text comments: collapsible, only shown when there are any -->
+            <details th:if="${!q.comments.isEmpty()}" class="mt-3">
+                <summary class="small text-muted text-uppercase"
+                         th:text="#{report.comments(${q.comments.size()})}">Comments (0)</summary>
+                <ul class="list-group mt-2">
+                    <li class="list-group-item" th:each="c : ${q.comments}" th:text="${c}">Comment</li>
+                </ul>
+            </details>
+        </div>
+        </div>
+    </section>
+</div>
+</body>
+</html>

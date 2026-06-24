@@ -51,8 +51,9 @@ public class Section {
         this.position = position;
     }
 
-    Question addQuestion(String text, QuestionType type, List<String> options, boolean allowsComments) {
-        Question question = new Question(this, text, type, options, allowsComments, questions.size());
+    Question addQuestion(String text, QuestionType type, List<String> options, boolean allowsComments,
+                         java.util.Map<String, Integer> optionScores) {
+        Question question = new Question(this, text, type, options, allowsComments, optionScores, questions.size());
         questions.add(question);
         return question;
     }

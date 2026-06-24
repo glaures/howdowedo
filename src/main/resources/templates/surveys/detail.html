@@ -11,7 +11,7 @@
         <span class="badge text-bg-secondary" th:text="#{'surveystatus.' + ${survey.status}}">DRAFT</span>
         <span class="ms-auto"></span>
         <a class="btn btn-sm btn-outline-secondary" th:if="${canAnalyze}"
-           th:href="@{'/surveys/' + ${survey.id} + '/results'}" th:text="#{surveys.analyze}">Analyze</a>
+           th:href="@{'/surveys/' + ${survey.id} + '/report'}" th:text="#{surveys.analyze}">Analyze</a>
         <a class="btn btn-sm btn-outline-secondary" th:if="${canAdminister}"
            th:href="@{'/surveys/' + ${survey.id} + '/permissions'}"
            th:text="#{permissions.manage}">Permissions</a>

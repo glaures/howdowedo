@@ -90,7 +90,8 @@ public class SurveySeeder implements CommandLineRunner {
             return;
         }
 
-        ensureScale();
+        Map<String, Integer> scores = scoreByLabel();
+        ensureScale(scores);
         Map<String, List<String>> questionsBySection = readSeed(resource);
 
         Survey survey = surveyService.createSurvey(owner.getId(),
@@ -100,8 +101,9 @@ public class SurveySeeder implements CommandLineRunner {
         for (Map.Entry<String, List<String>> entry : questionsBySection.entrySet()) {
             Section section = surveyService.addSection(survey.getId(), entry.getKey());
             for (String text : entry.getValue()) {
+                // Snapshot the per-option scores into the question so the report can compute favorability.
                 surveyService.addQuestion(survey.getId(), section.getId(),
-                        new NewQuestion(text, QuestionType.SCALE, SCALE_VALUES));
+                        new NewQuestion(text, QuestionType.SCALE, SCALE_VALUES, true, scores));
                 questionCount++;
             }
         }
@@ -116,12 +118,20 @@ public class SurveySeeder implements CommandLineRunner {
                 .orElseGet(() -> all.stream().findFirst().orElse(null));
     }
 
-    private void ensureScale() {
+    /** Scores the agreement scale from -2 (Strongly disagree) to +2 (Strongly agree), keyed by label. */
+    private Map<String, Integer> scoreByLabel() {
+        Map<String, Integer> scores = new LinkedHashMap<>();
+        for (int i = 0; i < SCALE_VALUES.size(); i++) {
+            scores.put(SCALE_VALUES.get(i), i - 2);
+        }
+        return scores;
+    }
+
+    private void ensureScale(Map<String, Integer> scores) {
         if (!scales.existsByNameIgnoreCase(SCALE_NAME)) {
-            List<ScaleValue> values = new ArrayList<>();
-            for (int i = 0; i < SCALE_VALUES.size(); i++) {
-                values.add(new ScaleValue(SCALE_VALUES.get(i), i - 2)); // score the agreement scale -2..+2
-            }
+            List<ScaleValue> values = scores.entrySet().stream()
+                    .map(e -> new ScaleValue(e.getKey(), e.getValue()))
+                    .toList();
             scales.save(new Scale(SCALE_NAME, SCALE_DESCRIPTION, values));
         }
     }

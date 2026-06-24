@@ -15,3 +15,10 @@ spring:
       ddl-auto: create-drop
     properties:
       hibernate.dialect: org.hibernate.dialect.H2Dialect
+
+# The dev .env (imported by application.yml) may enable sample-response seeding against a fixed
+# survey id; that dev aid must never run during tests, where the in-memory schema starts empty.
+app:
+  seed:
+    sample-responses:
+      enabled: false

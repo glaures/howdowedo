@@ -115,7 +115,7 @@ public class SurveyService {
             throw new SurveyStateException("error.survey.optionsRequired");
         }
         Question added = section.addQuestion(question.text(), question.type(), question.options(),
-                question.allowsComments());
+                question.allowsComments(), question.optionScores());
         surveys.flush(); // assign the generated id (cascade insert) so callers can reference it
         return added;
     }
@@ -135,7 +135,8 @@ public class SurveyService {
         if (needsOptions && (update.options() == null || update.options().isEmpty())) {
             throw new SurveyStateException("error.survey.optionsRequired");
         }
-        question.update(update.text(), update.type(), update.options(), update.allowsComments());
+        question.update(update.text(), update.type(), update.options(), update.allowsComments(),
+                update.optionScores());
         return question;
     }
 

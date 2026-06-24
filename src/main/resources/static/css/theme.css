@@ -8,6 +8,7 @@
     --hdwd-primary: #A7C196;
     --hdwd-primary-dark: #8AA978;
     --hdwd-navbar: #EAE2D2;
+    --hdwd-negative: #D98A8A;
 
     --bs-body-bg: var(--hdwd-bg);
     --bs-body-color: var(--hdwd-text);
@@ -78,4 +79,33 @@ body {
 .card {
     --bs-card-bg: #FBF8F2;
     border-color: var(--bs-border-color);
+}
+
+/* Report: favorable bar split into three contiguous segments — detractors (red), neutral (grey) and
+   supporters (green) — whose widths add up to the full 100% of the bar. */
+.favorbar {
+    display: flex;
+    height: 26px;
+    background: #E9E4D8;
+    border-radius: 4px;
+    overflow: hidden;
+    font-size: .75rem;
+    line-height: 26px;
+}
+.favorbar-seg {
+    text-align: center;
+    white-space: nowrap;
+    overflow: hidden;
+}
+.favorbar-pos {
+    background: var(--hdwd-primary);
+    color: var(--hdwd-text);
+}
+.favorbar-neutral {
+    background: #D8CFBC;
+    color: var(--hdwd-text);
+}
+.favorbar-neg {
+    background: var(--hdwd-negative);
+    color: #fff;
 }

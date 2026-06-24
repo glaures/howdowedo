@@ -12,13 +12,16 @@ import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.servlet.mvc.support.RedirectAttributes;
 
 import sandbox27.howdowedo.common.errors.LocalizedException;
+import sandbox27.howdowedo.scale.Scale;
 import sandbox27.howdowedo.scale.ScaleService;
 import sandbox27.howdowedo.user.CurrentUser;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.time.LocalDate;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 /**
@@ -27,8 +30,8 @@ import java.util.Set;
  * reusable {@link sandbox27.howdowedo.scale.Scale}.
  *
  * <p>Access to an individual survey is governed by its {@link SurveyPermission}s (see
- * {@link SurveyAccessService}): editing needs {@code EDIT}, the results screen {@code ANALYZE} and
- * the permissions screen {@code ADMINISTER}. Creating a survey still requires the global
+ * {@link SurveyAccessService}): editing needs {@code EDIT}, the report ({@code ANALYZE}, served by
+ * {@link sandbox27.howdowedo.report.ReportController}) and the permissions screen {@code ADMINISTER}. Creating a survey still requires the global
  * {@code SURVEY_MANAGER} role (enforced in security configuration).
  */
 @Controller
@@ -192,8 +195,7 @@ public class SurveyManagementController {
                               @RequestParam(name = "options", required = false) List<String> options,
                               @RequestParam(name = "allowsComments", defaultValue = "false") boolean allowsComments) {
         requireAccess(authentication, id, SurveyPermission.EDIT);
-        surveyService.addQuestion(id, sectionId,
-                new NewQuestion(text, type, resolveOptions(type, scaleId, options), allowsComments));
+        surveyService.addQuestion(id, sectionId, buildQuestion(text, type, scaleId, options, allowsComments));
         return "redirect:/surveys/" + id;
     }
 
@@ -206,8 +208,7 @@ public class SurveyManagementController {
                                  @RequestParam(name = "options", required = false) List<String> options,
                                  @RequestParam(name = "allowsComments", defaultValue = "false") boolean allowsComments) {
         requireAccess(authentication, id, SurveyPermission.EDIT);
-        surveyService.updateQuestion(id, questionId,
-                new NewQuestion(text, type, resolveOptions(type, scaleId, options), allowsComments));
+        surveyService.updateQuestion(id, questionId, buildQuestion(text, type, scaleId, options, allowsComments));
         return "redirect:/surveys/" + id;
     }
 
@@ -217,16 +218,6 @@ public class SurveyManagementController {
         requireAccess(authentication, id, SurveyPermission.EDIT);
         surveyService.removeQuestion(id, questionId);
         return "redirect:/surveys/" + id;
-    }
-
-    // --- analysis (ANALYZE) ---
-
-    @GetMapping("/{id}/results")
-    public String results(Authentication authentication, @PathVariable Long id, Model model) {
-        Survey survey = requireAccess(authentication, id, SurveyPermission.ANALYZE);
-        model.addAttribute("survey", survey);
-        model.addAttribute("results", surveyService.results(id));
-        return "surveys/results";
     }
 
     // --- per-survey permissions (ADMINISTER) ---
@@ -250,21 +241,30 @@ public class SurveyManagementController {
         return "redirect:/surveys/" + id + "/permissions";
     }
 
-    /** TEXT questions carry no options; a chosen scale is snapshotted; otherwise typed options win. */
-    private List<String> resolveOptions(QuestionType type, Long scaleId, List<String> options) {
+    /**
+     * Builds the question input. TEXT questions carry no options; a chosen scale is snapshotted
+     * (labels and, where present, per-option scores); otherwise the typed options win (no scores).
+     */
+    private NewQuestion buildQuestion(String text, QuestionType type, Long scaleId, List<String> options,
+                                      boolean allowsComments) {
         if (type == QuestionType.TEXT) {
-            return List.of();
+            return new NewQuestion(text, type, List.of(), allowsComments, Map.of());
         }
         if (scaleId != null) {
-            return scaleService.get(scaleId).getLabels();
+            Scale scale = scaleService.get(scaleId);
+            Map<String, Integer> scores = new LinkedHashMap<>();
+            scale.getValues().forEach(v -> {
+                if (v.getScore() != null) {
+                    scores.put(v.getValue(), v.getScore());
+                }
+            });
+            return new NewQuestion(text, type, scale.getLabels(), allowsComments, scores);
         }
-        if (options == null) {
-            return List.of();
-        }
-        return options.stream()
+        List<String> custom = options == null ? List.of() : options.stream()
                 .filter(o -> o != null && !o.isBlank())
                 .map(String::trim)
                 .toList();
+        return new NewQuestion(text, type, custom, allowsComments, Map.of());
     }
 
     /** Parses an ISO date (yyyy-MM-dd) from a form field; blank means "no end date". */
