@@ -1,0 +1,3 @@
+Background: #F2EDE3
+Text: #4E3F2C
+Primary Color: #A7C196

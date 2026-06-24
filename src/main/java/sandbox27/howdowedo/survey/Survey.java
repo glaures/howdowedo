@@ -16,6 +16,7 @@ import jakarta.persistence.Table;
 import sandbox27.howdowedo.common.errors.SurveyStateException;
 
 import java.time.Instant;
+import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -54,9 +55,13 @@ public class Survey {
     @Column(name = "min_responses_for_results", nullable = false)
     private int minResponsesForResults;
 
+    /** Optional last day responses are accepted (inclusive). {@code null} means no time limit. */
+    @Column(name = "end_date")
+    private LocalDate endDate;
+
     @OneToMany(mappedBy = "survey", cascade = CascadeType.ALL, orphanRemoval = true)
     @OrderBy("position")
-    private List<Question> questions = new ArrayList<>();
+    private List<Section> sections = new ArrayList<>();
 
     @Column(nullable = false, updatable = false)
     private Instant createdAt;
@@ -65,10 +70,12 @@ public class Survey {
         // for JPA
     }
 
-    public Survey(String title, String description, int minResponsesForResults, Long createdByUserId) {
+    public Survey(String title, String description, int minResponsesForResults, LocalDate endDate,
+                  Long createdByUserId) {
         this.title = title;
         this.description = description;
         this.minResponsesForResults = Math.max(1, minResponsesForResults);
+        this.endDate = endDate;
         this.createdByUserId = createdByUserId;
     }
 
@@ -77,22 +84,56 @@ public class Survey {
         this.createdAt = Instant.now();
     }
 
-    public Question addQuestion(String text, QuestionType type, List<String> options) {
-        Question question = new Question(this, text, type, options, questions.size());
-        questions.add(question);
-        return question;
+    public Section addSection(String title) {
+        Section section = new Section(this, title, sections.size());
+        sections.add(section);
+        return section;
+    }
+
+    /** Removes the section with the given id (and its questions via orphan removal), if present. */
+    public void removeSection(Long sectionId) {
+        sections.removeIf(s -> sectionId != null && sectionId.equals(s.getId()));
+    }
+
+    public Section section(Long sectionId) {
+        return sections.stream()
+                .filter(s -> s.getId().equals(sectionId))
+                .findFirst()
+                .orElse(null);
+    }
+
+    /** Removes the question with the given id from whichever section holds it. */
+    public void removeQuestion(Long questionId) {
+        sections.forEach(s -> s.removeQuestion(questionId));
+    }
+
+    public boolean isDraft() {
+        return status == SurveyStatus.DRAFT;
+    }
+
+    /** Sets or clears the end date. Allowed until the survey is closed. */
+    public void changeEndDate(LocalDate endDate) {
+        if (status == SurveyStatus.CLOSED) {
+            throw new SurveyStateException("error.survey.closedNoEdit");
+        }
+        this.endDate = endDate;
+    }
+
+    /** Whether the optional end date has passed (and responses should no longer be accepted). */
+    public boolean hasEnded() {
+        return endDate != null && LocalDate.now().isAfter(endDate);
     }
 
     public void open() {
         if (status != SurveyStatus.DRAFT) {
-            throw new SurveyStateException("Only draft surveys can be opened");
+            throw new SurveyStateException("error.survey.onlyDraftCanOpen");
         }
         status = SurveyStatus.OPEN;
     }
 
     public void close() {
         if (status != SurveyStatus.OPEN) {
-            throw new SurveyStateException("Only open surveys can be closed");
+            throw new SurveyStateException("error.survey.onlyOpenCanClose");
         }
         status = SurveyStatus.CLOSED;
     }
@@ -121,8 +162,19 @@ public class Survey {
         return minResponsesForResults;
     }
 
+    public LocalDate getEndDate() {
+        return endDate;
+    }
+
+    public List<Section> getSections() {
+        return List.copyOf(sections);
+    }
+
+    /** All questions across all sections, in section then question order. */
     public List<Question> getQuestions() {
-        return List.copyOf(questions);
+        return sections.stream()
+                .flatMap(s -> s.getQuestions().stream())
+                .toList();
     }
 
     public Instant getCreatedAt() {

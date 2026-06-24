@@ -17,7 +17,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * A single question within a {@link Survey}.
+ * A single question within a {@link Section} of a {@link Survey}.
  */
 @Entity
 @Table(name = "survey_questions")
@@ -28,8 +28,8 @@ public class Question {
     private Long id;
 
     @ManyToOne(optional = false)
-    @JoinColumn(name = "survey_id")
-    private Survey survey;
+    @JoinColumn(name = "section_id")
+    private Section section;
 
     @Column(nullable = false, length = 1000)
     private String text;
@@ -41,6 +41,10 @@ public class Question {
     @Column(nullable = false)
     private int position;
 
+    /** Whether participants may attach a free-text comment to their answer. */
+    @Column(name = "allows_comments", columnDefinition = "boolean not null default true")
+    private boolean allowsComments = true;
+
     @ElementCollection
     @CollectionTable(name = "survey_question_options", joinColumns = @JoinColumn(name = "question_id"))
     @Column(name = "option_value")
@@ -50,12 +54,22 @@ public class Question {
         // for JPA
     }
 
-    Question(Survey survey, String text, QuestionType type, List<String> options, int position) {
-        this.survey = survey;
+    Question(Section section, String text, QuestionType type, List<String> options, boolean allowsComments,
+             int position) {
+        this.section = section;
         this.text = text;
         this.type = type;
         this.options = options != null ? new ArrayList<>(options) : new ArrayList<>();
+        this.allowsComments = allowsComments;
         this.position = position;
+    }
+
+    /** Updates the editable attributes (text, type, options, comments) in place; position is kept. */
+    void update(String text, QuestionType type, List<String> options, boolean allowsComments) {
+        this.text = text;
+        this.type = type;
+        this.options = options != null ? new ArrayList<>(options) : new ArrayList<>();
+        this.allowsComments = allowsComments;
     }
 
     public Long getId() {
@@ -76,5 +90,9 @@ public class Question {
 
     public List<String> getOptions() {
         return List.copyOf(options);
+    }
+
+    public boolean isAllowsComments() {
+        return allowsComments;
     }
 }

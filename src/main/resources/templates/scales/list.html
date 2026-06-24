@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html th:lang="${#locale.language}" xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{fragments/layout :: head(#{scales.title})}"></head>
+<body>
+<nav th:replace="~{fragments/layout :: navbar}"></nav>
+<div th:replace="~{fragments/layout :: flash}"></div>
+<div class="container py-4">
+    <h1 class="h4 mb-3" th:text="#{scales.heading}">Scales</h1>
+    <p class="text-muted" th:text="#{scales.intro}">
+        Reusable answer scales you can pick when adding a question.
+    </p>
+
+    <div class="row">
+        <div class="col-lg-7">
+            <p th:if="${scales.isEmpty()}" class="text-muted" th:text="#{scales.empty}">No scales yet.</p>
+            <ul class="list-group mb-4" th:unless="${scales.isEmpty()}">
+                <li class="list-group-item" th:each="scale : ${scales}">
+                    <div class="d-flex justify-content-between align-items-start">
+                        <div class="ms-2 me-auto">
+                            <div class="fw-semibold" th:text="${scale.name}">Scale name</div>
+                            <div class="small text-muted" th:if="${scale.description}"
+                                 th:text="${scale.description}">Description</div>
+                            <div class="small">
+                                <span th:each="v,it : ${scale.values}">
+                                    <span th:text="${v.value}">a</span><span class="text-muted"
+                                          th:if="${v.score != null}" th:text="${' (' + v.score + ')'}"> (1)</span>
+                                    <span th:unless="${it.last}"> · </span>
+                                </span>
+                            </div>
+                        </div>
+                        <form method="post" th:action="@{'/scales/' + ${scale.id} + '/delete'}">
+                            <button class="btn btn-sm btn-outline-danger" type="submit"
+                                    th:text="#{action.delete}">Delete</button>
+                        </form>
+                    </div>
+
+                    <!-- Edit THIS scale -->
+                    <details class="mt-2">
+                        <summary class="small" th:text="#{scales.edit}">Edit</summary>
+                        <form class="mt-2" method="post" th:action="@{'/scales/' + ${scale.id}}">
+                            <div class="mb-2">
+                                <label class="form-label" th:text="#{scales.field.name}">Name</label>
+                                <input class="form-control" name="name" required th:value="${scale.name}">
+                            </div>
+                            <div class="mb-2">
+                                <label class="form-label" th:text="#{scales.field.description}">Description</label>
+                                <input class="form-control" name="description" th:value="${scale.description}">
+                            </div>
+                            <div class="mb-2">
+                                <label class="form-label" th:text="#{scales.field.values}">Values (in order)</label>
+                                <div class="values-container">
+                                    <div class="value-row input-group mb-2" th:each="v : ${scale.values}">
+                                        <input class="form-control" name="values" th:value="${v.value}"
+                                               th:placeholder="#{scales.field.value.placeholder}" placeholder="Value">
+                                        <input class="form-control" type="number" name="scores" th:value="${v.score}"
+                                               style="max-width: 6rem"
+                                               th:placeholder="#{scales.field.score.placeholder}" placeholder="#">
+                                    </div>
+                                </div>
+                                <button class="btn btn-sm btn-outline-secondary add-value" type="button"
+                                        th:text="#{scales.addValue}">Add value</button>
+                            </div>
+                            <button class="btn btn-primary mt-2" type="submit"
+                                    th:text="#{scales.update}">Save</button>
+                        </form>
+                    </details>
+                </li>
+            </ul>
+        </div>
+
+        <div class="col-lg-5">
+            <div class="card">
+                <div class="card-body">
+                    <h2 class="h6" th:text="#{scales.add}">New scale</h2>
+                    <form th:action="@{/scales}" method="post" th:with="s=${submitted}">
+                        <div class="mb-3">
+                            <label class="form-label" for="name" th:text="#{scales.field.name}">Name</label>
+                            <input class="form-control" id="name" name="name" required
+                                   th:value="${s != null and s['name'] != null ? s['name'][0] : ''}">
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label" for="description" th:text="#{scales.field.description}">Description</label>
+                            <input class="form-control" id="description" name="description"
+                                   th:value="${s != null and s['description'] != null ? s['description'][0] : ''}">
+                        </div>
+                        <div class="mb-2">
+                            <label class="form-label" th:text="#{scales.field.values}">Values (in order)</label>
+                            <div class="values-container">
+                                <th:block th:if="${s != null and s['values'] != null}">
+                                    <div class="value-row input-group mb-2" th:each="v,it : ${s['values']}">
+                                        <input class="form-control" name="values" th:value="${v}"
+                                               th:placeholder="#{scales.field.value.placeholder}" placeholder="Value">
+                                        <input class="form-control" type="number" name="scores" style="max-width: 6rem"
+                                               th:value="${s['scores'] != null and it.index < s['scores'].length ? s['scores'][it.index] : ''}"
+                                               th:placeholder="#{scales.field.score.placeholder}" placeholder="#">
+                                    </div>
+                                </th:block>
+                                <th:block th:unless="${s != null and s['values'] != null}">
+                                    <div class="value-row input-group mb-2">
+                                        <input class="form-control" name="values"
+                                               th:placeholder="#{scales.field.value.placeholder}" placeholder="Value">
+                                        <input class="form-control" type="number" name="scores" style="max-width: 6rem"
+                                               th:placeholder="#{scales.field.score.placeholder}" placeholder="#">
+                                    </div>
+                                    <div class="value-row input-group mb-2">
+                                        <input class="form-control" name="values"
+                                               th:placeholder="#{scales.field.value.placeholder}" placeholder="Value">
+                                        <input class="form-control" type="number" name="scores" style="max-width: 6rem"
+                                               th:placeholder="#{scales.field.score.placeholder}" placeholder="#">
+                                    </div>
+                                </th:block>
+                            </div>
+                            <button class="btn btn-sm btn-outline-secondary add-value" type="button"
+                                    th:text="#{scales.addValue}">Add value</button>
+                        </div>
+                        <button class="btn btn-primary mt-2" type="submit" th:text="#{scales.create}">Create</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script th:inline="javascript">
+    // Each "Add value" button appends another value+score row to the container right before it.
+    const valuePlaceholder = /*[[#{scales.field.value.placeholder}]]*/ 'Value';
+    const scorePlaceholder = /*[[#{scales.field.score.placeholder}]]*/ '#';
+    document.querySelectorAll('.add-value').forEach(function (button) {
+        button.addEventListener('click', function () {
+            const row = document.createElement('div');
+            row.className = 'value-row input-group mb-2';
+
+            const value = document.createElement('input');
+            value.className = 'form-control';
+            value.name = 'values';
+            value.placeholder = valuePlaceholder;
+
+            const score = document.createElement('input');
+            score.className = 'form-control';
+            score.name = 'scores';
+            score.type = 'number';
+            score.placeholder = scorePlaceholder;
+            score.style.maxWidth = '6rem';
+
+            row.appendChild(value);
+            row.appendChild(score);
+            button.previousElementSibling.appendChild(row);
+        });
+    });
+</script>
+</body>
+</html>

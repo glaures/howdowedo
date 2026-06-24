@@ -1,6 +1,10 @@
 # Test profile: in-memory H2 (MySQL compatibility) so tests need no running database.
 # Only the datasource is overridden; the main application.yml still imports security + persistence.
 spring:
+  # Persistent (JDBC-backed) sessions are production infrastructure; tests use the standard servlet
+  # session so MockMvc session/flash assertions behave as before.
+  autoconfigure:
+    exclude: org.springframework.boot.autoconfigure.session.SessionAutoConfiguration
   datasource:
     url: jdbc:h2:mem:testdb;MODE=MySQL;DB_CLOSE_DELAY=-1
     username: sa

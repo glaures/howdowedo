@@ -2,6 +2,7 @@ package sandbox27.howdowedo.auth.config;
 
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.http.HttpMethod;
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.web.SecurityFilterChain;
@@ -33,8 +34,18 @@ public class SecurityConfig {
                                             ProvisioningOidcUserService oidcUserService) throws Exception {
         http
                 .authorizeHttpRequests(auth -> auth
-                        .requestMatchers(LOGIN_PAGE, "/css/**", "/js/**", "/images/**", "/favicon.ico").permitAll()
+                        .requestMatchers(LOGIN_PAGE, "/css/**", "/js/**", "/images/**",
+                                "/favicon.ico", "/logo.png").permitAll()
+                        // Public survey-answering flow: authorised by the one-time code, not a login.
+                        .requestMatchers("/s/**").permitAll()
                         .requestMatchers("/admin/**").hasRole(Role.ADMINISTRATOR.name())
+                        // Creating surveys and managing scales stays a Survey Manager privilege ...
+                        .requestMatchers("/surveys/new").hasRole(Role.SURVEY_MANAGER.name())
+                        .requestMatchers(HttpMethod.POST, "/surveys").hasRole(Role.SURVEY_MANAGER.name())
+                        .requestMatchers("/scales/**").hasRole(Role.SURVEY_MANAGER.name())
+                        // ... but an individual survey is reachable by anyone it was shared with;
+                        // the per-survey permission check in the controller decides what they may do.
+                        .requestMatchers("/surveys", "/surveys/**").authenticated()
                         .anyRequest().authenticated())
                 .oauth2Login(oauth -> oauth
                         .loginPage(LOGIN_PAGE)

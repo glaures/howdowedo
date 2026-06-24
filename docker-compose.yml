@@ -1,27 +1,33 @@
 services:
   app:
     build: .
-    ports:
-      - "8081:8081"
+    restart: unless-stopped
+    # All application configuration comes from .env (copy .env.example and adjust for production).
     env_file:
       - .env
     environment:
-      # Reach the other compose services by name, regardless of .env (which targets local dev).
+      # Fixed for the compose network regardless of .env (which targets host-based local dev).
       SERVER_PORT: 8081
       MYSQL_HOST: db
+    # Host port is configurable so production can place the app behind a reverse proxy on any port.
+    ports:
+      - "${APP_PORT:-8081}:8081"
     depends_on:
       db:
         condition: service_healthy
 
   db:
     image: mysql:8.4
+    restart: unless-stopped
     environment:
       MYSQL_DATABASE: ${MYSQL_DATABASE:-howdowedo}
       MYSQL_USER: ${MYSQL_USER:-howdowedo}
       MYSQL_PASSWORD: ${MYSQL_PASSWORD:-howdowedo}
       MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-root}
+    # Bound to localhost by default so the database is not publicly reachable in production.
+    # Set DB_BIND=0.0.0.0 (and DB_PORT) only if you really need remote access to the database.
     ports:
-      - "3306:3306"
+      - "${DB_BIND:-127.0.0.1}:${DB_PORT:-3306}:3306"
     volumes:
       - db-data:/var/lib/mysql
     healthcheck:

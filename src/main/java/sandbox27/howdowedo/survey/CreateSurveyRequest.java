@@ -1,10 +1,10 @@
 package sandbox27.howdowedo.survey;
 
-import java.util.List;
+import java.time.LocalDate;
 
-/** Input for creating a survey. */
+/** Input for creating a survey. Sections and questions are added afterwards. */
 public record CreateSurveyRequest(String title,
                                   String description,
                                   int minResponsesForResults,
-                                  List<NewQuestion> questions) {
+                                  LocalDate endDate) {
 }

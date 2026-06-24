@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html th:lang="${#locale.language}" xmlns:th="http://www.thymeleaf.org"
+      xmlns:sec="http://www.thymeleaf.org/extras/spring-security">
+<head th:replace="~{fragments/layout :: head(#{surveys.title})}"></head>
+<body>
+<nav th:replace="~{fragments/layout :: navbar}"></nav>
+<div class="container py-4">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h1 class="h4 mb-0" th:text="#{surveys.heading}">Surveys</h1>
+        <a class="btn btn-primary" sec:authorize="hasRole('SURVEY_MANAGER')"
+           th:href="@{/surveys/new}" th:text="#{surveys.new}">New survey</a>
+    </div>
+
+    <p th:if="${surveys.isEmpty()}" class="text-muted" th:text="#{surveys.empty}">
+        You have no surveys yet.
+    </p>
+
+    <table th:unless="${surveys.isEmpty()}" class="table align-middle">
+        <thead>
+        <tr>
+            <th th:text="#{surveys.col.title}">Title</th>
+            <th th:text="#{surveys.col.status}">Status</th>
+            <th th:text="#{surveys.col.endDate}">End date</th>
+            <th th:text="#{surveys.col.questions}">Questions</th>
+            <th th:text="#{surveys.col.responses}">Responses</th>
+            <th></th>
+        </tr>
+        </thead>
+        <tbody>
+        <!-- Editable surveys: the whole row links to the detail page. -->
+        <tr th:each="entry : ${surveys}"
+            th:attr="data-href=${entry.canEdit} ? @{'/surveys/' + ${entry.survey.id}} : null">
+            <td th:text="${entry.survey.title}">Title</td>
+            <td><span class="badge text-bg-secondary"
+                      th:text="#{'surveystatus.' + ${entry.survey.status}}">DRAFT</span></td>
+            <td th:text="${entry.survey.endDate} ?: '—'">—</td>
+            <td th:text="${entry.survey.questions.size()}">0</td>
+            <td th:text="${entry.turnout.responded} + ' / ' + ${entry.turnout.invited}">0 / 0</td>
+            <td class="text-end">
+                <a class="btn btn-sm btn-outline-secondary" th:if="${entry.canAnalyze}"
+                   th:href="@{'/surveys/' + ${entry.survey.id} + '/results'}"
+                   th:text="#{surveys.analyze}">Analyze</a>
+                <a class="btn btn-sm btn-outline-secondary" th:if="${entry.canAdminister}"
+                   th:href="@{'/surveys/' + ${entry.survey.id} + '/permissions'}"
+                   th:text="#{permissions.manage}">Permissions</a>
+            </td>
+        </tr>
+        </tbody>
+    </table>
+</div>
+<style>
+    tr[data-href] {
+        cursor: pointer;
+        transition: background-color .15s ease, box-shadow .15s ease;
+    }
+    tr[data-href] td:first-child {
+        box-shadow: inset 3px 0 0 transparent;
+        transition: box-shadow .15s ease;
+    }
+    tr[data-href]:hover {
+        background-color: var(--bs-tertiary-bg);
+        box-shadow: 0 1px 6px rgba(0, 0, 0, .08);
+    }
+    tr[data-href]:hover td:first-child {
+        box-shadow: inset 3px 0 0 var(--bs-primary);
+    }
+</style>
+<script>
+    // Clicking a survey row opens it; clicks on the action buttons keep their own behaviour.
+    document.querySelectorAll('tr[data-href]').forEach(function (row) {
+        row.addEventListener('click', function (event) {
+            if (event.target.closest('a, button')) return;
+            window.location = row.dataset.href;
+        });
+    });
+</script>
+</body>
+</html>

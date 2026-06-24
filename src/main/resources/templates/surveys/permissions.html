@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html th:lang="${#locale.language}" xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{fragments/layout :: head(#{permissions.title})}"></head>
+<body>
+<nav th:replace="~{fragments/layout :: navbar}"></nav>
+<div th:replace="~{fragments/layout :: flash}"></div>
+<div class="container py-4">
+    <a class="small" th:href="@{'/surveys/' + ${survey.id}}" th:text="#{permissions.backToSurvey}">&larr; Survey</a>
+    <h1 class="h4 mt-1 mb-1" th:text="#{permissions.heading}">Permissions</h1>
+    <p class="text-muted" th:text="#{permissions.intro}">
+        Grant other users rights on this survey. The creator always keeps all rights.
+    </p>
+
+    <!-- Creator: always all rights, never editable -->
+    <div class="card mb-3" th:if="${page.owner != null}">
+        <div class="card-body d-flex justify-content-between align-items-center">
+            <div>
+                <span class="fw-semibold" th:text="${page.owner.name}">Owner</span>
+                <span class="text-muted small" th:text="${page.owner.email}">email</span>
+                <span class="badge text-bg-primary ms-1" th:text="#{permissions.owner}">Creator</span>
+            </div>
+            <span class="text-muted small" th:text="#{permissions.ownerAllRights}">All rights</span>
+        </div>
+    </div>
+
+    <!-- Delegated grants -->
+    <table class="table align-middle" th:unless="${page.grants.isEmpty()}">
+        <thead>
+        <tr>
+            <th th:text="#{permissions.col.user}">User</th>
+            <th th:text="#{permissions.col.rights}">Rights</th>
+            <th></th>
+        </tr>
+        </thead>
+        <tbody>
+        <tr th:each="grant : ${page.grants}">
+            <form method="post" th:action="@{'/surveys/' + ${survey.id} + '/permissions'}">
+                <input type="hidden" name="userId" th:value="${grant.user.id}">
+                <td>
+                    <div th:text="${grant.user.name}">Name</div>
+                    <div class="small text-muted" th:text="${grant.user.email}">email</div>
+                </td>
+                <td>
+                    <div class="form-check form-check-inline" th:each="perm : ${allPermissions}">
+                        <input class="form-check-input" type="checkbox" name="permissions"
+                               th:id="${'p-' + grant.user.id + '-' + perm}" th:value="${perm}"
+                               th:checked="${grant.permissions.contains(perm)}">
+                        <label class="form-check-label" th:for="${'p-' + grant.user.id + '-' + perm}"
+                               th:text="#{'surveypermission.' + ${perm}}">PERM</label>
+                    </div>
+                </td>
+                <td class="text-end">
+                    <button class="btn btn-sm btn-primary" type="submit" th:text="#{permissions.save}">Save</button>
+                </td>
+            </form>
+        </tr>
+        </tbody>
+    </table>
+    <p th:if="${page.grants.isEmpty()}" class="text-muted" th:text="#{permissions.empty}">
+        No one else has access yet.
+    </p>
+    <p class="small text-muted" th:text="#{permissions.removeHint}">
+        Clearing all rights and saving removes a user's access.
+    </p>
+
+    <!-- Grant access to another user -->
+    <div class="card mt-3" th:unless="${page.candidates.isEmpty()}">
+        <div class="card-body">
+            <h2 class="h6" th:text="#{permissions.add}">Grant access</h2>
+            <form method="post" th:action="@{'/surveys/' + ${survey.id} + '/permissions'}"
+                  class="row g-2 align-items-end">
+                <div class="col-md-5">
+                    <label class="form-label" for="userId" th:text="#{permissions.col.user}">User</label>
+                    <select class="form-select" id="userId" name="userId" required>
+                        <option value="" th:text="#{permissions.selectUser}">Select a user…</option>
+                        <option th:each="candidate : ${page.candidates}" th:value="${candidate.id}"
+                                th:text="${candidate.name + ' (' + candidate.email + ')'}">User</option>
+                    </select>
+                </div>
+                <div class="col-md-5">
+                    <div class="form-check form-check-inline" th:each="perm : ${allPermissions}">
+                        <input class="form-check-input" type="checkbox" name="permissions"
+                               th:id="${'new-' + perm}" th:value="${perm}">
+                        <label class="form-check-label" th:for="${'new-' + perm}"
+                               th:text="#{'surveypermission.' + ${perm}}">PERM</label>
+                    </div>
+                </div>
+                <div class="col-md-2 text-end">
+                    <button class="btn btn-outline-primary" type="submit" th:text="#{permissions.addButton}">Grant</button>
+                </div>
+            </form>
+        </div>
+    </div>
+    <p th:if="${page.candidates.isEmpty()}" class="text-muted small" th:text="#{permissions.noCandidates}">
+        All users already have access.
+    </p>
+</div>
+</body>
+</html>

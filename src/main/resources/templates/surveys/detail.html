@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<html th:lang="${#locale.language}" xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{fragments/layout :: head(${survey.title})}"></head>
+<body>
+<nav th:replace="~{fragments/layout :: navbar}"></nav>
+<div th:replace="~{fragments/layout :: flash}"></div>
+<div class="container py-4">
+    <a class="small" th:href="@{/surveys}" th:text="#{surveys.backToList}">&larr; Surveys</a>
+    <div class="d-flex align-items-center gap-2 mt-1 mb-1">
+        <h1 class="h4 mb-0" th:text="${survey.title}">Survey</h1>
+        <span class="badge text-bg-secondary" th:text="#{'surveystatus.' + ${survey.status}}">DRAFT</span>
+        <span class="ms-auto"></span>
+        <a class="btn btn-sm btn-outline-secondary" th:if="${canAnalyze}"
+           th:href="@{'/surveys/' + ${survey.id} + '/results'}" th:text="#{surveys.analyze}">Analyze</a>
+        <a class="btn btn-sm btn-outline-secondary" th:if="${canAdminister}"
+           th:href="@{'/surveys/' + ${survey.id} + '/permissions'}"
+           th:text="#{permissions.manage}">Permissions</a>
+    </div>
+    <p class="text-muted" th:if="${survey.description}" th:text="${survey.description}">Description</p>
+
+    <div th:if="${invitedCount}" class="alert alert-success" role="alert"
+         th:text="#{surveys.invited(${invitedCount})}">3 invitations sent.</div>
+
+    <!-- Lifecycle: status actions, end date, invitations -->
+    <div class="card mb-4">
+        <div class="card-body">
+            <div class="row g-3">
+                <!-- Status + open/close -->
+                <div class="col-md-4">
+                    <div class="text-muted small text-uppercase" th:text="#{surveys.col.status}">Status</div>
+                    <div class="mb-2">
+                        <span class="badge text-bg-secondary" th:text="#{'surveystatus.' + ${survey.status}}">DRAFT</span>
+                    </div>
+                    <form th:if="${survey.status.name() == 'DRAFT'}" method="post"
+                          th:action="@{'/surveys/' + ${survey.id} + '/open'}">
+                        <button class="btn btn-success btn-sm" type="submit" th:text="#{surveys.open.action}">Open</button>
+                    </form>
+                    <form th:if="${survey.status.name() == 'OPEN'}" method="post"
+                          th:action="@{'/surveys/' + ${survey.id} + '/close'}">
+                        <button class="btn btn-outline-danger btn-sm" type="submit" th:text="#{surveys.close.action}">Close</button>
+                    </form>
+                </div>
+
+                <!-- End date -->
+                <div class="col-md-4">
+                    <div class="text-muted small text-uppercase" th:text="#{surveys.field.endDate}">End date</div>
+                    <form th:if="${survey.status.name() != 'CLOSED'}" class="d-flex gap-2 mt-1"
+                          method="post" th:action="@{'/surveys/' + ${survey.id} + '/end-date'}">
+                        <input class="form-control form-control-sm" name="endDate" type="date"
+                               th:value="${survey.endDate}">
+                        <button class="btn btn-outline-secondary btn-sm" type="submit"
+                                th:text="#{action.save}">Save</button>
+                    </form>
+                    <div th:if="${survey.status.name() == 'CLOSED'}" class="mt-1"
+                         th:text="${survey.endDate} ?: #{surveys.endDate.none}">—</div>
+                </div>
+
+                <!-- Turnout (once not a draft) -->
+                <div class="col-md-4" th:if="${turnout}">
+                    <div class="text-muted small text-uppercase" th:text="#{surveys.turnout}">Turnout</div>
+                    <div class="mt-1" th:text="#{surveys.turnout.value(${turnout.responded}, ${turnout.invited})}">0 / 0</div>
+                </div>
+            </div>
+
+            <!-- Recipients (manage the audience; available before and while open) -->
+            <hr>
+            <div class="d-flex justify-content-between align-items-center">
+                <div>
+                    <span class="text-muted small text-uppercase" th:text="#{recipients.count}">Recipients</span>
+                    <span class="badge text-bg-secondary ms-1" th:text="${recipientCount}">0</span>
+                </div>
+                <a class="btn btn-outline-secondary btn-sm"
+                   th:href="@{'/surveys/' + ${survey.id} + '/recipients'}"
+                   th:text="#{recipients.manage}">Manage recipients</a>
+            </div>
+
+            <!-- Send invitations to the recipient list (only while open) -->
+            <div th:if="${survey.status.name() == 'OPEN'}" class="mt-3">
+                <hr>
+                <h2 class="h6" th:text="#{invitations.heading}">Send invitations</h2>
+                <p class="small text-muted mb-2"
+                   th:text="#{invitations.summary(${recipientCount}, ${invitedRecipientCount}, ${recipientCount - invitedRecipientCount})}">
+                    0 recipients · 0 invited · 0 waiting</p>
+                <form th:if="${recipientCount > invitedRecipientCount}" method="post"
+                      th:action="@{'/surveys/' + ${survey.id} + '/invitations'}">
+                    <button class="btn btn-primary btn-sm" type="submit"
+                            th:text="#{invitations.send}">Send invitations</button>
+                </form>
+                <p th:if="${recipientCount > 0 and recipientCount == invitedRecipientCount}"
+                   class="small text-success mb-0" th:text="#{invitations.allSent}">
+                    All recipients have already been invited.</p>
+                <p th:if="${recipientCount == 0}" class="small mb-0">
+                    <a th:href="@{'/surveys/' + ${survey.id} + '/recipients'}"
+                       th:text="#{recipients.manage}">Manage recipients</a>
+                </p>
+            </div>
+        </div>
+    </div>
+
+    <h2 class="h5 mt-4" th:text="#{sections.heading}">Sections</h2>
+    <p th:if="${sections.isEmpty()}" class="text-muted" th:text="#{sections.empty}">No sections yet.</p>
+
+    <!-- One card per section, in order -->
+    <div class="card mb-3" th:each="section : ${sections}">
+        <div class="card-body">
+            <div class="d-flex justify-content-between align-items-start">
+                <h3 class="h6 mb-0" th:text="${section.title}">Section title</h3>
+                <form th:if="${survey.draft}" method="post"
+                      th:action="@{'/surveys/' + ${survey.id} + '/sections/' + ${section.id} + '/delete'}">
+                    <button class="btn btn-sm btn-outline-danger" type="submit"
+                            th:text="#{sections.delete}">Delete section</button>
+                </form>
+            </div>
+
+            <p th:if="${section.questions.isEmpty()}" class="text-muted small mt-2 mb-0"
+               th:text="#{questions.empty}">No questions yet.</p>
+            <ol class="list-group list-group-numbered mt-3 mb-0" th:unless="${section.questions.isEmpty()}">
+                <li class="list-group-item" th:each="question : ${section.questions}">
+                    <div class="d-flex justify-content-between align-items-start">
+                        <div class="ms-2 me-auto">
+                            <div class="fw-semibold" th:text="${question.text}">Question text</div>
+                            <span class="badge text-bg-light" th:text="#{'questiontype.' + ${question.type}}">TYPE</span>
+                            <span class="small text-muted" th:if="${!question.options.isEmpty()}"
+                                  th:text="${#strings.listJoin(question.options, ', ')}">a, b, c</span>
+                        </div>
+                        <form th:if="${survey.draft}" method="post"
+                              th:action="@{'/surveys/' + ${survey.id} + '/questions/' + ${question.id} + '/delete'}">
+                            <button class="btn btn-sm btn-outline-danger" type="submit"
+                                    th:text="#{action.delete}">Delete</button>
+                        </form>
+                    </div>
+
+                    <!-- Edit THIS question -->
+                    <details th:if="${survey.draft}" class="mt-2">
+                        <summary class="small" th:text="#{questions.edit}">Edit</summary>
+                        <form class="mt-2" method="post"
+                              th:action="@{'/surveys/' + ${survey.id} + '/questions/' + ${question.id}}">
+                            <div class="mb-2">
+                                <label class="form-label" th:text="#{questions.field.text}">Question</label>
+                                <input class="form-control" name="text" required th:value="${question.text}">
+                            </div>
+                            <div class="row g-2">
+                                <div class="col-md-6">
+                                    <label class="form-label" th:text="#{questions.field.type}">Type</label>
+                                    <select class="form-select" name="type">
+                                        <option th:each="type : ${questionTypes}" th:value="${type}"
+                                                th:selected="${type == question.type}"
+                                                th:text="#{'questiontype.' + ${type}}">TYPE</option>
+                                    </select>
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="form-label" th:text="#{questions.field.scale}">Scale (optional)</label>
+                                    <select class="form-select" name="scaleId">
+                                        <option value="" th:text="#{questions.field.scale.none}">— Custom options —</option>
+                                        <option th:each="scale : ${scales}" th:value="${scale.id}"
+                                                th:text="${scale.name}">Scale</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="mt-2">
+                                <label class="form-label" th:text="#{questions.field.options}">Custom options</label>
+                                <div class="options">
+                                    <input th:each="opt : ${question.options}" class="form-control mb-2" name="options"
+                                           th:value="${opt}"
+                                           th:placeholder="#{questions.field.option.placeholder}" placeholder="Option">
+                                    <input th:if="${question.options.isEmpty()}" class="form-control mb-2" name="options"
+                                           th:placeholder="#{questions.field.option.placeholder}" placeholder="Option">
+                                </div>
+                                <button class="btn btn-sm btn-outline-secondary add-option" type="button"
+                                        th:text="#{questions.addOption}">Add option</button>
+                            </div>
+                            <div class="form-check mt-2">
+                                <input class="form-check-input" type="checkbox" name="allowsComments" value="true"
+                                       th:id="${'allowComments-' + question.id}"
+                                       th:checked="${question.allowsComments}">
+                                <label class="form-check-label" th:for="${'allowComments-' + question.id}"
+                                       th:text="#{questions.field.allowsComments}">Allow comments</label>
+                            </div>
+                            <button class="btn btn-primary btn-sm mt-3" type="submit"
+                                    th:text="#{action.save}">Save</button>
+                        </form>
+                    </details>
+                </li>
+            </ol>
+
+            <!-- Add a question to THIS section -->
+            <details th:if="${survey.draft}" class="mt-3">
+                <summary class="small" th:text="#{questions.add}">Add question</summary>
+                <form class="mt-2" method="post"
+                      th:action="@{'/surveys/' + ${survey.id} + '/sections/' + ${section.id} + '/questions'}">
+                    <div class="mb-2">
+                        <label class="form-label" th:text="#{questions.field.text}">Question</label>
+                        <input class="form-control" name="text" required>
+                    </div>
+                    <div class="row g-2">
+                        <div class="col-md-6">
+                            <label class="form-label" th:text="#{questions.field.type}">Type</label>
+                            <select class="form-select" name="type">
+                                <option th:each="type : ${questionTypes}" th:value="${type}"
+                                        th:text="#{'questiontype.' + ${type}}">TYPE</option>
+                            </select>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label" th:text="#{questions.field.scale}">Scale (optional)</label>
+                            <select class="form-select" name="scaleId">
+                                <option value="" th:text="#{questions.field.scale.none}">— Custom options —</option>
+                                <option th:each="scale : ${scales}" th:value="${scale.id}"
+                                        th:text="${scale.name}">Scale</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="mt-2">
+                        <label class="form-label" th:text="#{questions.field.options}">Custom options</label>
+                        <div class="options">
+                            <input class="form-control mb-2" name="options"
+                                   th:placeholder="#{questions.field.option.placeholder}" placeholder="Option">
+                        </div>
+                        <button class="btn btn-sm btn-outline-secondary add-option" type="button"
+                                th:text="#{questions.addOption}">Add option</button>
+                    </div>
+                    <div class="form-check mt-2">
+                        <input class="form-check-input" type="checkbox" name="allowsComments" value="true"
+                               th:id="${'allowComments-new-' + section.id}" checked>
+                        <label class="form-check-label" th:for="${'allowComments-new-' + section.id}"
+                               th:text="#{questions.field.allowsComments}">Allow comments</label>
+                    </div>
+                    <button class="btn btn-primary btn-sm mt-3" type="submit"
+                            th:text="#{questions.add}">Add question</button>
+                </form>
+            </details>
+        </div>
+    </div>
+
+    <!-- Add a new section -->
+    <form th:if="${survey.draft}" class="row g-2 align-items-end mt-2"
+          th:action="@{'/surveys/' + ${survey.id} + '/sections'}" method="post">
+        <div class="col-md-6">
+            <label class="form-label" for="sectionTitle" th:text="#{sections.field.title}">Section title</label>
+            <input class="form-control" id="sectionTitle" name="title" required
+                   th:value="${submitted != null and submitted['title'] != null ? submitted['title'][0] : ''}">
+        </div>
+        <div class="col-auto">
+            <button class="btn btn-outline-primary" type="submit" th:text="#{sections.add}">Add section</button>
+        </div>
+    </form>
+    <p th:unless="${survey.draft}" class="text-muted" th:text="#{questions.locked}">
+        Sections and questions can only be changed while the survey is a draft.
+    </p>
+</div>
+
+<script th:inline="javascript" th:if="${survey.draft}">
+    // Each "Add option" button appends another option input within its own form.
+    const placeholder = /*[[#{questions.field.option.placeholder}]]*/ 'Option';
+    document.querySelectorAll('.add-option').forEach(function (button) {
+        button.addEventListener('click', function () {
+            const input = document.createElement('input');
+            input.className = 'form-control mb-2';
+            input.name = 'options';
+            input.placeholder = placeholder;
+            button.previousElementSibling.appendChild(input);
+        });
+    });
+</script>
+</body>
+</html>

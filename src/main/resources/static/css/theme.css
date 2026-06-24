@@ -1,0 +1,81 @@
+/*
+ * HowDoWeDo theme: warm cream background, brown text, sage-green primary.
+ * Overrides Bootstrap 5.3 CSS variables (and the per-component --bs-btn-* vars that buttons read).
+ */
+:root {
+    --hdwd-bg: #F2EDE3;
+    --hdwd-text: #4E3F2C;
+    --hdwd-primary: #A7C196;
+    --hdwd-primary-dark: #8AA978;
+    --hdwd-navbar: #EAE2D2;
+
+    --bs-body-bg: var(--hdwd-bg);
+    --bs-body-color: var(--hdwd-text);
+    --bs-primary: var(--hdwd-primary);
+    --bs-primary-rgb: 167, 193, 150;
+    --bs-link-color: var(--hdwd-text);
+    --bs-link-color-rgb: 78, 63, 44;
+    --bs-link-hover-color: var(--hdwd-primary-dark);
+    --bs-link-hover-color-rgb: 138, 169, 120;
+    --bs-border-color: #DED4C2;
+}
+
+body {
+    background-color: var(--hdwd-bg);
+    color: var(--hdwd-text);
+}
+
+/* Subtle separation for the top bar so the logo stands out. */
+.navbar.bg-body-tertiary {
+    background-color: var(--hdwd-navbar) !important;
+}
+.navbar-brand img {
+    display: block;
+}
+
+/* Primary buttons: sage fill with dark-brown label for contrast. */
+.btn-primary {
+    --bs-btn-bg: var(--hdwd-primary);
+    --bs-btn-border-color: var(--hdwd-primary);
+    --bs-btn-color: var(--hdwd-text);
+    --bs-btn-hover-bg: var(--hdwd-primary-dark);
+    --bs-btn-hover-border-color: var(--hdwd-primary-dark);
+    --bs-btn-hover-color: var(--hdwd-text);
+    --bs-btn-active-bg: var(--hdwd-primary-dark);
+    --bs-btn-active-border-color: var(--hdwd-primary-dark);
+    --bs-btn-active-color: var(--hdwd-text);
+    --bs-btn-disabled-bg: var(--hdwd-primary);
+    --bs-btn-disabled-border-color: var(--hdwd-primary);
+    --bs-btn-disabled-color: var(--hdwd-text);
+}
+.btn-outline-primary {
+    --bs-btn-color: var(--hdwd-text);
+    --bs-btn-border-color: var(--hdwd-primary);
+    --bs-btn-hover-bg: var(--hdwd-primary);
+    --bs-btn-hover-border-color: var(--hdwd-primary);
+    --bs-btn-hover-color: var(--hdwd-text);
+    --bs-btn-active-bg: var(--hdwd-primary);
+    --bs-btn-active-border-color: var(--hdwd-primary);
+    --bs-btn-active-color: var(--hdwd-text);
+}
+
+/* Accent elements that otherwise stay Bootstrap blue. */
+.progress-bar {
+    background-color: var(--hdwd-primary);
+}
+.form-control:focus,
+.form-select:focus,
+.form-check-input:focus {
+    border-color: var(--hdwd-primary);
+    box-shadow: 0 0 0 0.25rem rgba(167, 193, 150, 0.45);
+}
+.form-check-input:checked {
+    background-color: var(--hdwd-primary);
+    border-color: var(--hdwd-primary);
+}
+
+/* Cards keep a clean light surface against the cream page. */
+.card {
+    --bs-card-bg: #FBF8F2;
+    border-color: var(--bs-border-color);
+}

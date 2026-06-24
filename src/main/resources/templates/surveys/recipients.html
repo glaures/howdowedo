@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html th:lang="${#locale.language}" xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{fragments/layout :: head(#{recipients.title})}"></head>
+<body>
+<nav th:replace="~{fragments/layout :: navbar}"></nav>
+<div th:replace="~{fragments/layout :: flash}"></div>
+<div class="container py-4">
+    <a class="small" th:href="@{'/surveys/' + ${survey.id}}" th:text="#{recipients.backToSurvey}">&larr; Survey</a>
+    <h1 class="h4 mt-1 mb-1" th:text="#{recipients.heading}">Recipients</h1>
+    <p class="text-muted" th:text="#{recipients.intro}">
+        Define who should receive a personal response link.
+    </p>
+
+    <div th:if="${importedAdded != null}" class="alert alert-success" role="alert"
+         th:text="#{recipients.imported(${importedAdded}, ${importedDuplicates}, ${importedInvalid})}">
+        Added 0 recipient(s).
+    </div>
+
+    <div class="row">
+        <!-- Current list -->
+        <div class="col-lg-7">
+            <h2 class="h6" th:text="#{recipients.list(${recipients.size()})}">Recipients (0)</h2>
+            <p th:if="${recipients.isEmpty()}" class="text-muted" th:text="#{recipients.empty}">No recipients yet.</p>
+            <ul class="list-group mb-4" th:unless="${recipients.isEmpty()}">
+                <li class="list-group-item d-flex justify-content-between align-items-center"
+                    th:each="recipient : ${recipients}">
+                    <span>
+                        <span th:text="${recipient.email}">alice@example.com</span>
+                        <span class="badge text-bg-success ms-1" th:if="${recipient.invited}"
+                              th:text="#{recipients.invitedBadge}">Invited</span>
+                    </span>
+                    <form th:if="${survey.status.name() != 'CLOSED'}" method="post"
+                          th:action="@{'/surveys/' + ${survey.id} + '/recipients/' + ${recipient.id} + '/delete'}">
+                        <button class="btn btn-sm btn-outline-danger" type="submit"
+                                th:text="#{action.delete}">Delete</button>
+                    </form>
+                </li>
+            </ul>
+        </div>
+
+        <!-- Add / upload -->
+        <div class="col-lg-5" th:if="${survey.status.name() != 'CLOSED'}">
+            <div class="card mb-3">
+                <div class="card-body">
+                    <h2 class="h6" th:text="#{recipients.add}">Add addresses</h2>
+                    <form method="post" th:action="@{'/surveys/' + ${survey.id} + '/recipients'}"
+                          th:with="s=${submitted}">
+                        <textarea class="form-control" name="emails" rows="4"
+                                  th:placeholder="#{invitations.placeholder}"
+                                  th:text="${s != null and s['emails'] != null ? s['emails'][0] : ''}"></textarea>
+                        <div class="form-text" th:text="#{recipients.add.help}">
+                            One address per line or separated by commas.
+                        </div>
+                        <button class="btn btn-primary btn-sm mt-2" type="submit"
+                                th:text="#{recipients.addButton}">Add recipients</button>
+                    </form>
+                </div>
+            </div>
+            <div class="card">
+                <div class="card-body">
+                    <h2 class="h6" th:text="#{recipients.upload}">Upload a list</h2>
+                    <form method="post" enctype="multipart/form-data"
+                          th:action="@{'/surveys/' + ${survey.id} + '/recipients/upload'}">
+                        <input class="form-control" type="file" name="file" accept=".txt,.csv" required>
+                        <div class="form-text" th:text="#{recipients.upload.help}">
+                            A plain text or CSV file. Every address found is imported.
+                        </div>
+                        <button class="btn btn-outline-primary btn-sm mt-2" type="submit"
+                                th:text="#{recipients.uploadButton}">Upload</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+        <div class="col-lg-5" th:if="${survey.status.name() == 'CLOSED'}">
+            <p class="text-muted" th:text="#{recipients.locked}">
+                Recipients can no longer be changed because the survey is closed.
+            </p>
+        </div>
+    </div>
+</div>
+</body>
+</html>

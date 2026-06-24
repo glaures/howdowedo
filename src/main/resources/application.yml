@@ -1,6 +1,18 @@
 spring:
   application:
     name: howdowedo
+  # Internationalisation: English is the default; German is provided via messages_de.properties.
+  messages:
+    basename: messages
+    encoding: UTF-8
+    fallback-to-system-locale: false
+  # Persist HTTP sessions in the database so a logged-in user stays signed in across application
+  # restarts. The schema scripts are idempotent (see resources/session), so `always` is safe to
+  # run on every startup; @@platform@@ resolves to mysql (production) or h2 (tests).
+  session:
+    jdbc:
+      initialize-schema: always
+      schema: classpath:session/schema-@@platform@@.sql
   # Load secrets from the local .env (KEY=VALUE), then the OAuth2 provider registrations.
   # The .env file is optional so the app also starts from real environment variables.
   config:
@@ -15,7 +27,27 @@ app:
   base-url: ${APP_BASE_URL:http://localhost:8081}
   mail:
     from: ${MAIL_FROM:no-reply@howdowedo.local}
+  seed:
+    # When true, SurveySeeder creates a survey from the seed file on startup (idempotent). The seed
+    # file is optional and not part of the repository; if it is missing the seeder does nothing.
+    survey: ${SEED_SURVEY:false}
+    survey-file: ${SEED_SURVEY_FILE:seed/seed-survey.tsv}
 
 server:
   # Defaults to 8081 for local testing; override with SERVER_PORT in other environments.
   port: ${SERVER_PORT:8081}
+  # Behind a TLS-terminating reverse proxy, honour X-Forwarded-* so OAuth2 redirect URIs and the
+  # invitation links use the external https URL. Set FORWARD_HEADERS_STRATEGY=framework in production.
+  forward-headers-strategy: ${FORWARD_HEADERS_STRATEGY:none}
+  servlet:
+    session:
+      # Keep users signed in for a long time so they don't have to re-authenticate constantly.
+      timeout: ${SESSION_TIMEOUT:30d}
+      cookie:
+        # max-age makes the session cookie persistent (survives closing the browser); without it the
+        # cookie is cleared on close. same-site=lax keeps it working with the OAuth2 login redirect.
+        max-age: ${SESSION_COOKIE_MAX_AGE:30d}
+        http-only: true
+        same-site: lax
+        # Send the session cookie only over HTTPS. Set SESSION_COOKIE_SECURE=true in production.
+        secure: ${SESSION_COOKIE_SECURE:false}

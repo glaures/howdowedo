@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html th:lang="${#locale.language}" xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{fragments/layout :: head(#{surveys.new.title})}"></head>
+<body>
+<nav th:replace="~{fragments/layout :: navbar}"></nav>
+<div class="container py-4">
+    <h1 class="h4 mb-3" th:text="#{surveys.new}">New survey</h1>
+
+    <form th:action="@{/surveys}" method="post" class="col-lg-7" th:with="s=${submitted}">
+        <div class="mb-3">
+            <label class="form-label" for="title" th:text="#{surveys.field.title}">Title</label>
+            <input class="form-control" id="title" name="title" required
+                   th:value="${s != null and s['title'] != null ? s['title'][0] : ''}">
+        </div>
+        <div class="mb-3">
+            <label class="form-label" for="description" th:text="#{surveys.field.description}">Description</label>
+            <textarea class="form-control" id="description" name="description" rows="3"
+                      th:text="${s != null and s['description'] != null ? s['description'][0] : ''}"></textarea>
+        </div>
+        <div class="mb-3">
+            <label class="form-label" for="minResponses" th:text="#{surveys.field.minResponses}">Minimum responses for results</label>
+            <input class="form-control" id="minResponses" name="minResponsesForResults" type="number"
+                   min="1" th:value="${s != null and s['minResponsesForResults'] != null ? s['minResponsesForResults'][0] : '3'}">
+            <div class="form-text" th:text="#{surveys.field.minResponses.help}">
+                Results stay hidden until at least this many responses exist (anonymity protection).
+            </div>
+        </div>
+        <div class="mb-3">
+            <label class="form-label" for="endDate" th:text="#{surveys.field.endDate}">End date</label>
+            <input class="form-control" id="endDate" name="endDate" type="date"
+                   th:value="${s != null and s['endDate'] != null ? s['endDate'][0] : ''}">
+            <div class="form-text" th:text="#{surveys.field.endDate.help}">
+                Optional. Responses are no longer accepted after this day.
+            </div>
+        </div>
+        <button class="btn btn-primary" type="submit" th:text="#{surveys.create}">Create</button>
+        <a class="btn btn-link" th:href="@{/surveys}" th:text="#{action.cancel}">Cancel</a>
+    </form>
+</div>
+</body>
+</html>

@@ -6,6 +6,7 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.transaction.annotation.Transactional;
 
+import sandbox27.howdowedo.common.errors.LocalizedException;
 import sandbox27.howdowedo.common.errors.NotFoundException;
 import sandbox27.howdowedo.user.Role;
 import sandbox27.howdowedo.user.User;
@@ -28,10 +29,10 @@ class UserServiceTest {
     private UserRepository userRepository;
 
     @Test
-    void firstUserBecomesAdministrator() {
+    void firstUserReceivesAllRoles() {
         User user = userService.provisionOnLogin("azure", "sub-1", "ada@example.com", "Ada");
 
-        assertThat(user.getRoles()).containsExactlyInAnyOrder(Role.USER, Role.ADMINISTRATOR);
+        assertThat(user.getRoles()).containsExactlyInAnyOrder(Role.values());
     }
 
     @Test
@@ -69,7 +70,8 @@ class UserServiceTest {
         User admin = userService.provisionOnLogin("azure", "admin", "admin@example.com", "Admin");
 
         assertThatThrownBy(() -> userService.setRoles(admin.getId(), Set.of(Role.USER)))
-                .isInstanceOf(IllegalStateException.class);
+                .isInstanceOf(LocalizedException.class)
+                .hasMessage("error.user.lastAdmin");
     }
 
     @Test

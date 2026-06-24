@@ -8,6 +8,7 @@ import sandbox27.howdowedo.common.errors.NotFoundException;
 import sandbox27.howdowedo.common.errors.SurveyStateException;
 
 import java.security.SecureRandom;
+import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashMap;
@@ -31,17 +32,20 @@ public class SurveyService {
     private final SurveyRepository surveys;
     private final SurveyAccessCodeRepository accessCodes;
     private final SurveyResponseRepository responses;
+    private final SurveyRecipientRepository recipients;
     private final InvitationMailSender mailSender;
     private final String baseUrl;
 
     public SurveyService(SurveyRepository surveys,
                          SurveyAccessCodeRepository accessCodes,
                          SurveyResponseRepository responses,
+                         SurveyRecipientRepository recipients,
                          InvitationMailSender mailSender,
                          @Value("${app.base-url:http://localhost:8081}") String baseUrl) {
         this.surveys = surveys;
         this.accessCodes = accessCodes;
         this.responses = responses;
+        this.recipients = recipients;
         this.mailSender = mailSender;
         this.baseUrl = baseUrl;
     }
@@ -49,16 +53,111 @@ public class SurveyService {
     @Transactional
     public Survey createSurvey(Long createdByUserId, CreateSurveyRequest request) {
         Survey survey = new Survey(request.title(), request.description(),
-                request.minResponsesForResults(), createdByUserId);
-        if (request.questions() != null) {
-            request.questions().forEach(q -> survey.addQuestion(q.text(), q.type(), q.options()));
-        }
+                request.minResponsesForResults(), request.endDate(), createdByUserId);
         return surveys.save(survey);
+    }
+
+    /** Sets or clears the end date (allowed until the survey is closed). */
+    @Transactional
+    public void updateEndDate(Long surveyId, LocalDate endDate) {
+        require(surveyId).changeEndDate(endDate);
+    }
+
+    @Transactional(readOnly = true)
+    public List<Survey> findByCreator(Long createdByUserId) {
+        List<Survey> result = surveys.findByCreatedByUserIdOrderByCreatedAtDesc(createdByUserId);
+        // Initialise sections and their questions within the session; open-in-view is disabled.
+        result.forEach(survey -> survey.getSections().forEach(section -> section.getQuestions().size()));
+        return result;
+    }
+
+    @Transactional(readOnly = true)
+    public Survey get(Long surveyId) {
+        Survey survey = require(surveyId);
+        // Initialise sections, questions and their options within the session for rendering the
+        // detail page (open-in-view is disabled, so lazy access in the view would otherwise fail).
+        survey.getSections().forEach(section ->
+                section.getQuestions().forEach(question -> question.getOptions().size()));
+        return survey;
+    }
+
+    /** Adds a titled section to a draft survey. */
+    @Transactional
+    public Section addSection(Long surveyId, String title) {
+        Survey survey = requireDraft(surveyId);
+        String cleanTitle = title != null ? title.trim() : "";
+        if (cleanTitle.isEmpty()) {
+            throw new SurveyStateException("error.section.titleRequired");
+        }
+        Section section = survey.addSection(cleanTitle);
+        surveys.flush(); // assign the generated id (cascade insert) so callers can reference it
+        return section;
+    }
+
+    @Transactional
+    public void removeSection(Long surveyId, Long sectionId) {
+        requireDraft(surveyId).removeSection(sectionId);
+    }
+
+    /**
+     * Adds a question to a section of a draft survey. Choice and scale questions require at least one
+     * answer option (for scale questions these are the snapshotted scale values).
+     */
+    @Transactional
+    public Question addQuestion(Long surveyId, Long sectionId, NewQuestion question) {
+        Survey survey = requireDraft(surveyId);
+        Section section = survey.section(sectionId);
+        if (section == null) {
+            throw new NotFoundException("error.section.notFound", sectionId);
+        }
+        boolean needsOptions = question.type() != QuestionType.TEXT;
+        if (needsOptions && (question.options() == null || question.options().isEmpty())) {
+            throw new SurveyStateException("error.survey.optionsRequired");
+        }
+        Question added = section.addQuestion(question.text(), question.type(), question.options(),
+                question.allowsComments());
+        surveys.flush(); // assign the generated id (cascade insert) so callers can reference it
+        return added;
+    }
+
+    /**
+     * Updates the text, type and answer options of an existing question in a draft survey. The same
+     * option rule as for adding applies (choice and scale questions need at least one option).
+     */
+    @Transactional
+    public Question updateQuestion(Long surveyId, Long questionId, NewQuestion update) {
+        Survey survey = requireDraft(surveyId);
+        Question question = survey.getQuestions().stream()
+                .filter(q -> q.getId().equals(questionId))
+                .findFirst()
+                .orElseThrow(() -> new NotFoundException("error.question.notFound", questionId));
+        boolean needsOptions = update.type() != QuestionType.TEXT;
+        if (needsOptions && (update.options() == null || update.options().isEmpty())) {
+            throw new SurveyStateException("error.survey.optionsRequired");
+        }
+        question.update(update.text(), update.type(), update.options(), update.allowsComments());
+        return question;
+    }
+
+    @Transactional
+    public void removeQuestion(Long surveyId, Long questionId) {
+        requireDraft(surveyId).removeQuestion(questionId);
+    }
+
+    private Survey requireDraft(Long surveyId) {
+        Survey survey = require(surveyId);
+        if (!survey.isDraft()) {
+            throw new SurveyStateException("error.survey.notDraft");
+        }
+        return survey;
     }
 
     @Transactional
     public Survey open(Long surveyId) {
         Survey survey = require(surveyId);
+        if (survey.getQuestions().isEmpty()) {
+            throw new SurveyStateException("error.survey.noQuestions");
+        }
         survey.open();
         return survey;
     }
@@ -83,6 +182,12 @@ public class SurveyService {
     @Transactional
     public int distributeInvitations(Long surveyId, List<String> emails) {
         Survey survey = require(surveyId);
+        if (survey.getStatus() != SurveyStatus.OPEN) {
+            throw new SurveyStateException("error.survey.mustBeOpenToInvite");
+        }
+        if (emails == null || emails.isEmpty()) {
+            throw new SurveyStateException("error.invitations.noRecipients");
+        }
 
         List<String> shuffled = new ArrayList<>(emails);
         Collections.shuffle(shuffled, new SecureRandom());
@@ -96,22 +201,39 @@ public class SurveyService {
     }
 
     /**
+     * Sends a personal response link to every recipient on the survey's list who has not been invited
+     * yet, and marks them as invited so a repeated send only reaches newly added recipients. The
+     * recipient list is the single source of addresses (see {@link SurveyRecipient}).
+     *
+     * @return the number of invitations sent in this run
+     */
+    @Transactional
+    public int inviteRecipients(Long surveyId) {
+        Survey survey = require(surveyId);
+        if (survey.getStatus() != SurveyStatus.OPEN) {
+            throw new SurveyStateException("error.survey.mustBeOpenToInvite");
+        }
+        if (recipients.countBySurveyId(surveyId) == 0) {
+            throw new SurveyStateException("error.invitations.noRecipients");
+        }
+        List<SurveyRecipient> pending = recipients.findBySurveyIdAndInvitedFalse(surveyId);
+        if (pending.isEmpty()) {
+            throw new SurveyStateException("error.invitations.allInvited");
+        }
+
+        int sent = distributeInvitations(surveyId, pending.stream().map(SurveyRecipient::getEmail).toList());
+        pending.forEach(SurveyRecipient::markInvited); // managed entities; flushed on commit
+        return sent;
+    }
+
+    /**
      * Records an anonymous submission authorised by a one-time access code. The code is validated and
      * consumed; the answers are stored with no link to the code or any person.
      */
     @Transactional
     public void submitResponse(Long surveyId, String code, ResponseSubmission submission) {
-        Survey survey = require(surveyId);
-        if (survey.getStatus() != SurveyStatus.OPEN) {
-            throw new SurveyStateException("Survey is not open for responses");
-        }
-
-        SurveyAccessCode accessCode = accessCodes
-                .findBySurveyIdAndCodeHash(surveyId, AccessCodes.hash(code))
-                .orElseThrow(() -> new SurveyStateException("Invalid or unknown access code"));
-        if (accessCode.isUsed()) {
-            throw new SurveyStateException("This access code has already been used");
-        }
+        requireOpenForResponse(surveyId);
+        SurveyAccessCode accessCode = requireUsableCode(surveyId, code);
 
         SurveyResponse response = new SurveyResponse(surveyId);
         if (submission.answers() != null) {
@@ -120,13 +242,122 @@ public class SurveyService {
                 for (String value : values) {
                     response.addAnswer(answer.questionId(), value);
                 }
+                response.setComment(answer.questionId(), answer.comment());
             }
         }
+        response.complete();
         responses.save(response);
 
         // Separate, unlinked write: consume the code without referencing the response just stored.
         accessCode.markUsed();
         accessCodes.save(accessCode);
+    }
+
+    /**
+     * Loads a survey for answering: validates that it is open, not past its end date and that the code
+     * is valid and unused, and initialises its sections/questions/options for rendering.
+     */
+    @Transactional(readOnly = true)
+    public Survey loadForParticipation(Long surveyId, String code) {
+        Survey survey = requireOpenForResponse(surveyId);
+        requireUsableCode(surveyId, code);
+        survey.getSections().forEach(section ->
+                section.getQuestions().forEach(question -> question.getOptions().size()));
+        return survey;
+    }
+
+    /** The chosen-value answers saved for an in-progress response, as {@code questionId -> values}. */
+    @Transactional(readOnly = true)
+    public Map<Long, List<String>> savedAnswers(Long surveyId, String code) {
+        return responses.findBySurveyIdAndInProgressCodeHash(surveyId, AccessCodes.hash(code))
+                .map(response -> {
+                    Map<Long, List<String>> byQuestion = new LinkedHashMap<>();
+                    response.getAnswers().stream()
+                            .filter(answer -> !answer.isComment())
+                            .forEach(answer -> byQuestion
+                                    .computeIfAbsent(answer.getQuestionId(), k -> new ArrayList<>())
+                                    .add(answer.getValue()));
+                    return byQuestion;
+                })
+                .orElseGet(Map::of);
+    }
+
+    /** The free-text comments saved for an in-progress response, as {@code questionId -> comment}. */
+    @Transactional(readOnly = true)
+    public Map<Long, String> savedComments(Long surveyId, String code) {
+        return responses.findBySurveyIdAndInProgressCodeHash(surveyId, AccessCodes.hash(code))
+                .map(response -> {
+                    Map<Long, String> byQuestion = new LinkedHashMap<>();
+                    response.getAnswers().stream()
+                            .filter(Answer::isComment)
+                            .forEach(answer -> byQuestion.put(answer.getQuestionId(), answer.getValue()));
+                    return byQuestion;
+                })
+                .orElseGet(Map::of);
+    }
+
+    /**
+     * Saves (or replaces) the answers for one section of an in-progress response, so progress is not
+     * lost if the participant pauses. Creates the in-progress response on first save.
+     */
+    @Transactional
+    public void saveSection(Long surveyId, String code, Long sectionId,
+                            Map<Long, List<String>> answers, Map<Long, String> comments) {
+        Survey survey = requireOpenForResponse(surveyId);
+        requireUsableCode(surveyId, code);
+        Section section = survey.section(sectionId);
+        if (section == null) {
+            throw new NotFoundException("error.section.notFound", sectionId);
+        }
+
+        String hash = AccessCodes.hash(code);
+        SurveyResponse response = responses.findBySurveyIdAndInProgressCodeHash(surveyId, hash)
+                .orElseGet(() -> new SurveyResponse(surveyId, hash));
+        // Only the questions of this section are (re)written; other sections keep their saved answers.
+        section.getQuestions().forEach(question -> {
+            response.setAnswers(question.getId(), answers.get(question.getId()));
+            if (question.isAllowsComments()) {
+                response.setComment(question.getId(), comments.get(question.getId()));
+            }
+        });
+        responses.save(response);
+    }
+
+    /** Finalises the in-progress response and consumes the access code. */
+    @Transactional
+    public void completeParticipation(Long surveyId, String code) {
+        requireOpenForResponse(surveyId);
+        SurveyAccessCode accessCode = requireUsableCode(surveyId, code);
+
+        String hash = AccessCodes.hash(code);
+        SurveyResponse response = responses.findBySurveyIdAndInProgressCodeHash(surveyId, hash)
+                .orElseGet(() -> new SurveyResponse(surveyId, hash));
+        response.complete();
+        responses.save(response);
+
+        accessCode.markUsed();
+        accessCodes.save(accessCode);
+    }
+
+    private Survey requireOpenForResponse(Long surveyId) {
+        Survey survey = require(surveyId);
+        if (survey.getStatus() != SurveyStatus.OPEN) {
+            throw new SurveyStateException("error.survey.notOpen");
+        }
+        if (survey.hasEnded()) {
+            throw new SurveyStateException("error.survey.ended");
+        }
+        return survey;
+    }
+
+    private SurveyAccessCode requireUsableCode(Long surveyId, String code) {
+        SurveyAccessCode accessCode = accessCodes
+                .findBySurveyIdAndCodeHash(surveyId, AccessCodes.hash(code))
+                .orElseThrow(() -> new SurveyStateException("error.survey.invalidCode"));
+        if (accessCode.isUsed()) {
+            throw new SurveyStateException("error.survey.codeUsed");
+        }
+        return accessCode;
     }
 
     /** Turnout figures (issued vs used codes). Never reveals who responded. */
@@ -143,16 +374,18 @@ public class SurveyService {
     @Transactional(readOnly = true)
     public SurveyResults results(Long surveyId) {
         Survey survey = require(surveyId);
-        long count = responses.countBySurveyId(surveyId);
+        long count = responses.countBySurveyIdAndCompletedTrue(surveyId);
         if (count < survey.getMinResponsesForResults()) {
-            throw new SurveyStateException("Not enough responses yet to show results without "
-                    + "risking de-anonymisation (need at least " + survey.getMinResponsesForResults() + ")");
+            throw new SurveyStateException("error.survey.notEnoughResponses",
+                    survey.getMinResponsesForResults());
         }
 
         Map<Long, List<String>> answersByQuestion = new LinkedHashMap<>();
-        for (SurveyResponse response : responses.findBySurveyId(surveyId)) {
+        Map<Long, List<String>> commentsByQuestion = new LinkedHashMap<>();
+        for (SurveyResponse response : responses.findBySurveyIdAndCompletedTrue(surveyId)) {
             for (Answer answer : response.getAnswers()) {
-                answersByQuestion.computeIfAbsent(answer.getQuestionId(), k -> new ArrayList<>())
+                Map<Long, List<String>> target = answer.isComment() ? commentsByQuestion : answersByQuestion;
+                target.computeIfAbsent(answer.getQuestionId(), k -> new ArrayList<>())
                         .add(answer.getValue());
             }
         }
@@ -160,19 +393,21 @@ public class SurveyService {
         List<QuestionResult> questionResults = new ArrayList<>();
         for (Question question : survey.getQuestions()) {
             List<String> values = answersByQuestion.getOrDefault(question.getId(), List.of());
-            questionResults.add(toQuestionResult(question, values));
+            List<String> comments = commentsByQuestion.getOrDefault(question.getId(), List.of());
+            questionResults.add(toQuestionResult(question, values, comments));
         }
         return new SurveyResults(survey.getId(), survey.getTitle(), (int) count, questionResults);
     }
 
-    private QuestionResult toQuestionResult(Question question, List<String> values) {
+    private QuestionResult toQuestionResult(Question question, List<String> values, List<String> comments) {
         if (question.getType() == QuestionType.TEXT) {
             return new QuestionResult(question.getId(), question.getText(), question.getType(),
-                    Map.of(), List.copyOf(values));
+                    Map.of(), List.copyOf(values), List.copyOf(comments));
         }
         Map<String, Long> counts = new LinkedHashMap<>();
         values.forEach(v -> counts.merge(v, 1L, Long::sum));
-        return new QuestionResult(question.getId(), question.getText(), question.getType(), counts, List.of());
+        return new QuestionResult(question.getId(), question.getText(), question.getType(), counts,
+                List.of(), List.copyOf(comments));
     }
 
     private String responseUrl(Long surveyId, String code) {
@@ -181,6 +416,6 @@ public class SurveyService {
 
     private Survey require(Long surveyId) {
         return surveys.findById(surveyId)
-                .orElseThrow(() -> new NotFoundException("Survey " + surveyId + " not found"));
+                .orElseThrow(() -> new NotFoundException("error.survey.notFound", surveyId));
     }
 }

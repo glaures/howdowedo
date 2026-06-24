@@ -4,6 +4,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
 
@@ -29,6 +30,14 @@ class AuthenticationFlowTest {
     }
 
     @Test
+    void staticBrandingAssetsArePublic() throws Exception {
+        // The login page embeds these; if they were not public, Spring would save the asset request
+        // and redirect the user to it (e.g. /logo.png) after login instead of to their destination.
+        mockMvc.perform(get("/logo.png")).andExpect(status().isOk());
+        mockMvc.perform(get("/css/theme.css")).andExpect(status().isOk());
+    }
+
+    @Test
     void protectedPageRedirectsAnonymousUserToLogin() throws Exception {
         mockMvc.perform(get("/"))
                 .andExpect(status().is3xxRedirection())
@@ -45,10 +54,27 @@ class AuthenticationFlowTest {
     }
 
     @Test
-    void authenticatedUserSeesPersonalisedHome() throws Exception {
+    void plainUserSeesLimitedHome() throws Exception {
         mockMvc.perform(get("/").with(oauth2Login()
+                        .authorities(new SimpleGrantedAuthority("ROLE_USER"))
                         .attributes(attrs -> attrs.put("name", "Ada Lovelace"))))
                 .andExpect(status().isOk())
                 .andExpect(content().string(containsString("Ada Lovelace")));
+    }
+
+    @Test
+    void surveyWorkerIsRedirectedToSurveys() throws Exception {
+        mockMvc.perform(get("/").with(oauth2Login()
+                        .authorities(new SimpleGrantedAuthority("ROLE_SURVEY_MANAGER"))))
+                .andExpect(status().is3xxRedirection())
+                .andExpect(redirectedUrl("/surveys"));
+    }
+
+    @Test
+    void administratorOnlyIsRedirectedToAdminArea() throws Exception {
+        mockMvc.perform(get("/").with(oauth2Login()
+                        .authorities(new SimpleGrantedAuthority("ROLE_ADMINISTRATOR"))))
+                .andExpect(status().is3xxRedirection())
+                .andExpect(redirectedUrl("/admin/users"));
     }
 }

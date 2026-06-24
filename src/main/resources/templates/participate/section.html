@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html th:lang="${#locale.language}" xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{fragments/layout :: head(${survey.title})}"></head>
+<body>
+<div class="container py-4" style="max-width: 720px;">
+    <h1 class="h4 mb-1" th:text="${survey.title}">Survey</h1>
+    <p class="text-muted" th:if="${survey.description}" th:text="${survey.description}">Description</p>
+
+    <!-- Progress -->
+    <div class="d-flex justify-content-between small text-muted mb-1">
+        <span th:text="#{participate.progress(${sectionNumber}, ${totalSections})}">Section 1 of 3</span>
+        <span th:text="${section.title}">Section</span>
+    </div>
+    <div class="progress mb-4" role="progressbar" style="height: 6px;">
+        <div class="progress-bar" th:style="'width:' + (${sectionNumber} * 100 / ${totalSections}) + '%'"></div>
+    </div>
+
+    <h2 class="h5 mb-3" th:text="${section.title}">Section title</h2>
+
+    <form method="post" th:action="@{'/s/' + ${survey.id} + '/section'}">
+        <input type="hidden" name="code" th:value="${code}">
+        <input type="hidden" name="sectionId" th:value="${section.id}">
+        <input type="hidden" name="sectionIndex" th:value="${sectionIndex}">
+
+        <div class="mb-4" th:each="question : ${section.questions}"
+             th:with="ans=${saved.get(question.id)},cmt=${savedComments.get(question.id)}">
+            <label class="form-label fw-semibold" th:text="${question.text}">Question</label>
+
+            <!-- Single choice / scale: radio buttons -->
+            <div th:if="${question.type.name() == 'SINGLE_CHOICE' or question.type.name() == 'SCALE'}">
+                <div class="form-check" th:each="option, it : ${question.options}">
+                    <input class="form-check-input" type="radio"
+                           th:id="${'q' + question.id + '-' + it.index}"
+                           th:name="${'answer_' + question.id}" th:value="${option}"
+                           th:checked="${ans != null and ans.contains(option)}">
+                    <label class="form-check-label" th:for="${'q' + question.id + '-' + it.index}"
+                           th:text="${option}">Option</label>
+                </div>
+            </div>
+
+            <!-- Multiple choice: checkboxes -->
+            <div th:if="${question.type.name() == 'MULTIPLE_CHOICE'}">
+                <div class="form-check" th:each="option, it : ${question.options}">
+                    <input class="form-check-input" type="checkbox"
+                           th:id="${'q' + question.id + '-' + it.index}"
+                           th:name="${'answer_' + question.id}" th:value="${option}"
+                           th:checked="${ans != null and ans.contains(option)}">
+                    <label class="form-check-label" th:for="${'q' + question.id + '-' + it.index}"
+                           th:text="${option}">Option</label>
+                </div>
+            </div>
+
+            <!-- Free text -->
+            <textarea th:if="${question.type.name() == 'TEXT'}" class="form-control" rows="3"
+                      th:name="${'answer_' + question.id}"
+                      th:text="${ans != null and !ans.isEmpty() ? ans[0] : ''}"></textarea>
+
+            <!-- Optional free-text comment -->
+            <div class="mt-2" th:if="${question.allowsComments}">
+                <label class="form-label small text-muted" th:for="${'comment_' + question.id}"
+                       th:text="#{participate.comment}">Comment (optional)</label>
+                <textarea class="form-control" rows="2"
+                          th:id="${'comment_' + question.id}" th:name="${'comment_' + question.id}"
+                          th:text="${cmt}"></textarea>
+            </div>
+        </div>
+
+        <div class="d-flex justify-content-between">
+            <button class="btn btn-outline-secondary" type="submit" name="direction" value="back"
+                    th:if="${!isFirst}" th:text="#{participate.back}">Back</button>
+            <span th:if="${isFirst}"></span>
+            <button class="btn btn-primary" type="submit" name="direction" value="next"
+                    th:unless="${isLast}" th:text="#{participate.next}">Next</button>
+            <button class="btn btn-success" type="submit" name="direction" value="finish"
+                    th:if="${isLast}" th:text="#{participate.finish}">Finish</button>
+        </div>
+    </form>
+</div>
+</body>
+</html>

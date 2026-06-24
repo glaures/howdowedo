@@ -31,3 +31,9 @@ target/
 # virtual machine crash logs, see http://www.java.com/en/download/help/error_hotspot.xml
 hs_err_pid*
 replay_pid*
+/assets/Engagement_Survey_2_2022_CEO_deep_dive.pptx
+/assets/EE_Survey questions Oct_24.xlsx
+
+# Confidential, organisation-specific survey seed file (the seeder ignores it when absent).
+# The generic test fixture under src/test/resources/seed is committed; this production file is not.
+/src/main/resources/seed/seed-survey.tsv
