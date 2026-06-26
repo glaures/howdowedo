@@ -193,9 +193,10 @@ public class SurveyManagementController {
                               @RequestParam QuestionType type,
                               @RequestParam(required = false) Long scaleId,
                               @RequestParam(name = "options", required = false) List<String> options,
-                              @RequestParam(name = "allowsComments", defaultValue = "false") boolean allowsComments) {
+                              @RequestParam(name = "allowsComments", defaultValue = "false") boolean allowsComments,
+                              @RequestParam(name = "mandatory", defaultValue = "false") boolean mandatory) {
         requireAccess(authentication, id, SurveyPermission.EDIT);
-        surveyService.addQuestion(id, sectionId, buildQuestion(text, type, scaleId, options, allowsComments));
+        surveyService.addQuestion(id, sectionId, buildQuestion(text, type, scaleId, options, allowsComments, mandatory));
         return "redirect:/surveys/" + id;
     }
 
@@ -206,9 +207,11 @@ public class SurveyManagementController {
                                  @RequestParam QuestionType type,
                                  @RequestParam(required = false) Long scaleId,
                                  @RequestParam(name = "options", required = false) List<String> options,
-                                 @RequestParam(name = "allowsComments", defaultValue = "false") boolean allowsComments) {
+                                 @RequestParam(name = "allowsComments", defaultValue = "false") boolean allowsComments,
+                                 @RequestParam(name = "mandatory", defaultValue = "false") boolean mandatory) {
         requireAccess(authentication, id, SurveyPermission.EDIT);
-        surveyService.updateQuestion(id, questionId, buildQuestion(text, type, scaleId, options, allowsComments));
+        surveyService.updateQuestion(id, questionId,
+                buildQuestion(text, type, scaleId, options, allowsComments, mandatory));
         return "redirect:/surveys/" + id;
     }
 
@@ -246,9 +249,9 @@ public class SurveyManagementController {
      * (labels and, where present, per-option scores); otherwise the typed options win (no scores).
      */
     private NewQuestion buildQuestion(String text, QuestionType type, Long scaleId, List<String> options,
-                                      boolean allowsComments) {
+                                      boolean allowsComments, boolean mandatory) {
         if (type == QuestionType.TEXT) {
-            return new NewQuestion(text, type, List.of(), allowsComments, Map.of());
+            return new NewQuestion(text, type, List.of(), allowsComments, mandatory, Map.of());
         }
         if (scaleId != null) {
             Scale scale = scaleService.get(scaleId);
@@ -258,13 +261,13 @@ public class SurveyManagementController {
                     scores.put(v.getValue(), v.getScore());
                 }
             });
-            return new NewQuestion(text, type, scale.getLabels(), allowsComments, scores);
+            return new NewQuestion(text, type, scale.getLabels(), allowsComments, mandatory, scores);
         }
         List<String> custom = options == null ? List.of() : options.stream()
                 .filter(o -> o != null && !o.isBlank())
                 .map(String::trim)
                 .toList();
-        return new NewQuestion(text, type, custom, allowsComments, Map.of());
+        return new NewQuestion(text, type, custom, allowsComments, mandatory, Map.of());
     }
 
     /** Parses an ISO date (yyyy-MM-dd) from a form field; blank means "no end date". */

@@ -47,10 +47,37 @@ public class SurveyParticipationController {
     @GetMapping("/{surveyId}")
     public String show(@PathVariable Long surveyId, @RequestParam String code,
                        @RequestParam(name = "section", required = false) Integer sectionParam, Model model) {
+        return renderSection(surveyId, code, sectionParam == null ? 0 : sectionParam, List.of(), model);
+    }
+
+    @PostMapping("/{surveyId}/section")
+    public String save(@PathVariable Long surveyId, @RequestParam String code,
+                       @RequestParam Long sectionId, @RequestParam int sectionIndex,
+                       @RequestParam String direction, @RequestParam MultiValueMap<String, String> form,
+                       Model model) {
+        surveyService.saveSection(surveyId, code, sectionId, extractAnswers(form), extractComments(form));
+
+        // Going back never validates; moving on (next/finish) requires this section's mandatory answers.
+        if (!"back".equals(direction)) {
+            List<Long> missing = surveyService.unansweredMandatory(surveyId, code, sectionId);
+            if (!missing.isEmpty()) {
+                return renderSection(surveyId, code, sectionIndex, missing, model);
+            }
+        }
+        if ("finish".equals(direction)) {
+            surveyService.completeParticipation(surveyId, code);
+            return "redirect:/s/" + surveyId + "/done";
+        }
+        int target = "back".equals(direction) ? sectionIndex - 1 : sectionIndex + 1;
+        return "redirect:/s/" + surveyId + "?code=" + encode(code) + "&section=" + target;
+    }
+
+    /** Renders one section, highlighting any mandatory questions left unanswered ({@code missing}). */
+    private String renderSection(Long surveyId, String code, int requestedIndex, List<Long> missing, Model model) {
         Survey survey = surveyService.loadForParticipation(surveyId, code);
         List<Section> sections = survey.getSections();
 
-        int index = Math.max(0, Math.min(sectionParam == null ? 0 : sectionParam, sections.size() - 1));
+        int index = Math.max(0, Math.min(requestedIndex, sections.size() - 1));
         model.addAttribute("survey", survey);
         model.addAttribute("code", code);
         model.addAttribute("section", sections.get(index));
@@ -61,21 +88,8 @@ public class SurveyParticipationController {
         model.addAttribute("isLast", index == sections.size() - 1);
         model.addAttribute("saved", surveyService.savedAnswers(surveyId, code));
         model.addAttribute("savedComments", surveyService.savedComments(surveyId, code));
+        model.addAttribute("missing", missing);
         return "participate/section";
-    }
-
-    @PostMapping("/{surveyId}/section")
-    public String save(@PathVariable Long surveyId, @RequestParam String code,
-                       @RequestParam Long sectionId, @RequestParam int sectionIndex,
-                       @RequestParam String direction, @RequestParam MultiValueMap<String, String> form) {
-        surveyService.saveSection(surveyId, code, sectionId, extractAnswers(form), extractComments(form));
-
-        if ("finish".equals(direction)) {
-            surveyService.completeParticipation(surveyId, code);
-            return "redirect:/s/" + surveyId + "/done";
-        }
-        int target = "back".equals(direction) ? sectionIndex - 1 : sectionIndex + 1;
-        return "redirect:/s/" + surveyId + "?code=" + encode(code) + "&section=" + target;
     }
 
     @GetMapping("/{surveyId}/done")

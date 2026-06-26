@@ -11,6 +11,7 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.containsString;
@@ -129,8 +130,50 @@ class SurveyParticipationFlowTest {
     }
 
     @Test
+    void finishingWithAnUnansweredMandatoryQuestionIsBlocked() throws Exception {
+        buildOpenSurveyWithCode();
+
+        // Answer section A, then try to finish section B leaving its mandatory question blank.
+        surveyService.saveSection(surveyId, code, sectionA, Map.of(questionA, List.of("Yes")), Map.of());
+        mockMvc.perform(post("/s/{id}/section", surveyId).with(csrf())
+                        .param("code", code).param("sectionId", String.valueOf(sectionB))
+                        .param("sectionIndex", "1").param("direction", "finish"))
+                .andExpect(status().isOk()) // re-rendered, not redirected to /done
+                .andExpect(content().string(containsString("Part B")));
+
+        // The code is not consumed and no completed response is recorded.
+        assertThat(surveyService.turnout(surveyId)).isEqualTo(new SurveyTurnout(1, 0));
+        assertThat(surveyService.savedAnswers(surveyId, code)).doesNotContainKey(questionB);
+    }
+
+    @Test
+    void aNonMandatoryQuestionMayBeLeftUnanswered() throws Exception {
+        Survey survey = surveyService.createSurvey(1L, new CreateSurveyRequest("Optional", "d", 1, null));
+        Long sid = survey.getId();
+        Section only = surveyService.addSection(sid, "Part");
+        surveyService.addQuestion(sid, only.getId(), new NewQuestion("Optional?", QuestionType.TEXT,
+                List.of(), true, false, Map.of()));
+        surveyService.open(sid);
+        surveyService.distributeInvitations(sid, List.of("p@example.com"));
+        ArgumentCaptor<String> url = ArgumentCaptor.forClass(String.class);
+        verify(mailSender).sendInvitation(anyString(), anyString(), url.capture());
+        String c = url.getValue().substring(url.getValue().indexOf("code=") + "code=".length());
+
+        mockMvc.perform(post("/s/{id}/section", sid).with(csrf())
+                        .param("code", c).param("sectionId", String.valueOf(only.getId()))
+                        .param("sectionIndex", "0").param("direction", "finish"))
+                .andExpect(status().is3xxRedirection())
+                .andExpect(redirectedUrl("/s/" + sid + "/done"));
+
+        assertThat(surveyService.results(sid).responseCount()).isEqualTo(1);
+    }
+
+    @Test
     void aUsedLinkShowsAFriendlyMessageInsteadOfBouncingToLogin() throws Exception {
         buildOpenSurveyWithCode();
+        // Answer both mandatory questions, then consume the code by finishing.
+        surveyService.saveSection(surveyId, code, sectionA, Map.of(questionA, List.of("Yes")), Map.of());
+        surveyService.saveSection(surveyId, code, sectionB, Map.of(questionB, List.of("ok")), Map.of());
         surveyService.completeParticipation(surveyId, code); // consume the code
 
         mockMvc.perform(get("/s/{id}", surveyId).param("code", code))

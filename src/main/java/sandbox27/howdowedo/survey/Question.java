@@ -48,6 +48,10 @@ public class Question {
     @Column(name = "allows_comments", columnDefinition = "boolean not null default true")
     private boolean allowsComments = true;
 
+    /** Whether participants must answer this question before they can submit their response. */
+    @Column(name = "mandatory", columnDefinition = "boolean not null default true")
+    private boolean mandatory = true;
+
     @ElementCollection
     @CollectionTable(name = "survey_question_options", joinColumns = @JoinColumn(name = "question_id"))
     @Column(name = "option_value")
@@ -69,23 +73,25 @@ public class Question {
     }
 
     Question(Section section, String text, QuestionType type, List<String> options, boolean allowsComments,
-             Map<String, Integer> optionScores, int position) {
+             boolean mandatory, Map<String, Integer> optionScores, int position) {
         this.section = section;
         this.text = text;
         this.type = type;
         this.options = options != null ? new ArrayList<>(options) : new ArrayList<>();
         this.allowsComments = allowsComments;
+        this.mandatory = mandatory;
         this.optionScores = optionScores != null ? new LinkedHashMap<>(optionScores) : new LinkedHashMap<>();
         this.position = position;
     }
 
-    /** Updates the editable attributes (text, type, options, scores, comments) in place; position is kept. */
+    /** Updates the editable attributes (text, type, options, scores, comments, mandatory) in place; position is kept. */
     void update(String text, QuestionType type, List<String> options, boolean allowsComments,
-                Map<String, Integer> optionScores) {
+                boolean mandatory, Map<String, Integer> optionScores) {
         this.text = text;
         this.type = type;
         this.options = options != null ? new ArrayList<>(options) : new ArrayList<>();
         this.allowsComments = allowsComments;
+        this.mandatory = mandatory;
         this.optionScores = optionScores != null ? new LinkedHashMap<>(optionScores) : new LinkedHashMap<>();
     }
 
@@ -116,5 +122,9 @@ public class Question {
 
     public boolean isAllowsComments() {
         return allowsComments;
+    }
+
+    public boolean isMandatory() {
+        return mandatory;
     }
 }

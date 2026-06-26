@@ -176,6 +176,13 @@
                                 <label class="form-check-label" th:for="${'allowComments-' + question.id}"
                                        th:text="#{questions.field.allowsComments}">Allow comments</label>
                             </div>
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" name="mandatory" value="true"
+                                       th:id="${'mandatory-' + question.id}"
+                                       th:checked="${question.mandatory}">
+                                <label class="form-check-label" th:for="${'mandatory-' + question.id}"
+                                       th:text="#{questions.field.mandatory}">Mandatory</label>
+                            </div>
                             <button class="btn btn-primary btn-sm mt-3" type="submit"
                                     th:text="#{action.save}">Save</button>
                         </form>
@@ -223,6 +230,12 @@
                                th:id="${'allowComments-new-' + section.id}" checked>
                         <label class="form-check-label" th:for="${'allowComments-new-' + section.id}"
                                th:text="#{questions.field.allowsComments}">Allow comments</label>
+                    </div>
+                    <div class="form-check">
+                        <input class="form-check-input" type="checkbox" name="mandatory" value="true"
+                               th:id="${'mandatory-new-' + section.id}" checked>
+                        <label class="form-check-label" th:for="${'mandatory-new-' + section.id}"
+                               th:text="#{questions.field.mandatory}">Mandatory</label>
                     </div>
                     <button class="btn btn-primary btn-sm mt-3" type="submit"
                             th:text="#{questions.add}">Add question</button>

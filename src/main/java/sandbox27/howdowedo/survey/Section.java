@@ -52,8 +52,9 @@ public class Section {
     }
 
     Question addQuestion(String text, QuestionType type, List<String> options, boolean allowsComments,
-                         java.util.Map<String, Integer> optionScores) {
-        Question question = new Question(this, text, type, options, allowsComments, optionScores, questions.size());
+                         boolean mandatory, java.util.Map<String, Integer> optionScores) {
+        Question question = new Question(this, text, type, options, allowsComments, mandatory, optionScores,
+                questions.size());
         questions.add(question);
         return question;
     }

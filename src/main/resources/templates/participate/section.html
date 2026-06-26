@@ -17,14 +17,23 @@
 
     <h2 class="h5 mb-3" th:text="${section.title}">Section title</h2>
 
+    <div class="alert alert-danger" th:if="${!missing.isEmpty()}" th:text="#{participate.mandatory.missing}">
+        Please answer all required questions before continuing.
+    </div>
+
     <form method="post" th:action="@{'/s/' + ${survey.id} + '/section'}">
         <input type="hidden" name="code" th:value="${code}">
         <input type="hidden" name="sectionId" th:value="${section.id}">
         <input type="hidden" name="sectionIndex" th:value="${sectionIndex}">
 
         <div class="mb-4" th:each="question : ${section.questions}"
-             th:with="ans=${saved.get(question.id)},cmt=${savedComments.get(question.id)}">
-            <label class="form-label fw-semibold" th:text="${question.text}">Question</label>
+             th:with="ans=${saved.get(question.id)},cmt=${savedComments.get(question.id)},
+                      unanswered=${missing.contains(question.id)}">
+            <label class="form-label fw-semibold" th:classappend="${unanswered} ? 'text-danger'">
+                <span th:text="${question.text}">Question</span>
+                <span th:if="${question.mandatory}" class="text-danger" aria-hidden="true"
+                      th:title="#{participate.mandatory}">*</span>
+            </label>
 
             <!-- Single choice / scale: radio buttons -->
             <div th:if="${question.type.name() == 'SINGLE_CHOICE' or question.type.name() == 'SCALE'}">
@@ -32,13 +41,14 @@
                     <input class="form-check-input" type="radio"
                            th:id="${'q' + question.id + '-' + it.index}"
                            th:name="${'answer_' + question.id}" th:value="${option}"
+                           th:required="${question.mandatory}"
                            th:checked="${ans != null and ans.contains(option)}">
                     <label class="form-check-label" th:for="${'q' + question.id + '-' + it.index}"
                            th:text="${option}">Option</label>
                 </div>
             </div>
 
-            <!-- Multiple choice: checkboxes -->
+            <!-- Multiple choice: checkboxes (required is enforced server-side; HTML required can't span a group) -->
             <div th:if="${question.type.name() == 'MULTIPLE_CHOICE'}">
                 <div class="form-check" th:each="option, it : ${question.options}">
                     <input class="form-check-input" type="checkbox"
@@ -52,7 +62,7 @@
 
             <!-- Free text -->
             <textarea th:if="${question.type.name() == 'TEXT'}" class="form-control" rows="3"
-                      th:name="${'answer_' + question.id}"
+                      th:name="${'answer_' + question.id}" th:required="${question.mandatory}"
                       th:text="${ans != null and !ans.isEmpty() ? ans[0] : ''}"></textarea>
 
             <!-- Optional free-text comment -->

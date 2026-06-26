@@ -115,7 +115,7 @@ public class SurveyService {
             throw new SurveyStateException("error.survey.optionsRequired");
         }
         Question added = section.addQuestion(question.text(), question.type(), question.options(),
-                question.allowsComments(), question.optionScores());
+                question.allowsComments(), question.mandatory(), question.optionScores());
         surveys.flush(); // assign the generated id (cascade insert) so callers can reference it
         return added;
     }
@@ -136,7 +136,7 @@ public class SurveyService {
             throw new SurveyStateException("error.survey.optionsRequired");
         }
         question.update(update.text(), update.type(), update.options(), update.allowsComments(),
-                update.optionScores());
+                update.mandatory(), update.optionScores());
         return question;
     }
 
@@ -324,11 +324,35 @@ public class SurveyService {
         responses.save(response);
     }
 
+    /**
+     * Mandatory questions of the survey (or of a single section, if {@code sectionId} is given) that
+     * have no non-blank saved answer yet. Used to block submitting an incomplete response.
+     */
+    @Transactional(readOnly = true)
+    public List<Long> unansweredMandatory(Long surveyId, String code, Long sectionId) {
+        Survey survey = require(surveyId);
+        Section section = sectionId == null ? null : survey.section(sectionId);
+        List<Question> questions = section != null ? section.getQuestions() : survey.getQuestions();
+        Map<Long, List<String>> saved = savedAnswers(surveyId, code);
+        return questions.stream()
+                .filter(Question::isMandatory)
+                .filter(question -> isBlank(saved.get(question.getId())))
+                .map(Question::getId)
+                .toList();
+    }
+
+    private boolean isBlank(List<String> values) {
+        return values == null || values.stream().allMatch(value -> value == null || value.isBlank());
+    }
+
     /** Finalises the in-progress response and consumes the access code. */
     @Transactional
     public void completeParticipation(Long surveyId, String code) {
         requireOpenForResponse(surveyId);
         SurveyAccessCode accessCode = requireUsableCode(surveyId, code);
+        if (!unansweredMandatory(surveyId, code, null).isEmpty()) {
+            throw new SurveyStateException("error.survey.mandatoryUnanswered");
+        }
 
         String hash = AccessCodes.hash(code);
         SurveyResponse response = responses.findBySurveyIdAndInProgressCodeHash(surveyId, hash)
