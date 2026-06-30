@@ -52,14 +52,50 @@ class SurveySeederTest {
 
         assertThat(survey.getStatus()).isEqualTo(SurveyStatus.DRAFT);
         assertThat(survey.getSections()).extracting(Section::getTitle)
-                .containsExactly("Engagement", "Leadership"); // order preserved, grouped by section
+                .containsExactly("Engagement", "Leadership", "About you"); // order preserved, grouped by section
 
         List<Question> questions = survey.getQuestions();
-        assertThat(questions).hasSize(3);
-        assertThat(questions).allMatch(q -> q.getType() == QuestionType.SCALE);
-        assertThat(questions).allMatch(q -> q.getOptions().size() == 5);
+        assertThat(questions).hasSize(4);
+        assertThat(questions).filteredOn(q -> q.getType() == QuestionType.SCALE)
+                .hasSize(3)
+                .allMatch(q -> q.getOptions().size() == 5);
 
         assertThat(scales.existsByNameIgnoreCase("Agreement (5-point)")).isTrue();
+    }
+
+    @Test
+    void mapsSingleChoiceQuestionsWithTheirOptions() throws Exception {
+        users.provisionOnLogin("test", "owner", "owner@example.com", "Owner");
+
+        seeder(TEST_SEED).run();
+
+        Survey survey = surveys.findAll().stream()
+                .filter(s -> s.getTitle().equals(SURVEY_TITLE))
+                .findFirst().orElseThrow();
+        Question single = surveyService.get(survey.getId()).getQuestions().stream()
+                .filter(q -> q.getType() == QuestionType.SINGLE_CHOICE)
+                .findFirst().orElseThrow();
+
+        assertThat(single.getText()).isEqualTo("What is your gender?");
+        assertThat(single.getOptions()).containsExactly("male", "female");
+        assertThat(single.getOptionScores()).isEmpty();
+    }
+
+    @Test
+    void marksMandatoryFromTheFirstColumn() throws Exception {
+        users.provisionOnLogin("test", "owner", "owner@example.com", "Owner");
+
+        seeder(TEST_SEED).run();
+
+        Survey survey = surveys.findAll().stream()
+                .filter(s -> s.getTitle().equals(SURVEY_TITLE))
+                .findFirst().orElseThrow();
+        List<Question> questions = surveyService.get(survey.getId()).getQuestions();
+
+        assertThat(questions).filteredOn(q -> q.getType() == QuestionType.SCALE)
+                .allMatch(Question::isMandatory);
+        assertThat(questions).filteredOn(q -> q.getType() == QuestionType.SINGLE_CHOICE)
+                .allMatch(q -> !q.isMandatory());
     }
 
     @Test

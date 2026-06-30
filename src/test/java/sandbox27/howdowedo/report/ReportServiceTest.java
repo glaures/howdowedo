@@ -157,11 +157,128 @@ class ReportServiceTest {
                 .isInstanceOf(SurveyStateException.class);
     }
 
+    @Test
+    void segmentsAnswersByTheChosenQuestion() {
+        Survey survey = surveyService.createSurvey(MANAGER, new CreateSurveyRequest("S", "d", 1, null));
+        Section section = surveyService.addSection(survey.getId(), "General");
+        Long gender = surveyService.addQuestion(survey.getId(), section.getId(),
+                new NewQuestion("Gender?", QuestionType.SINGLE_CHOICE, List.of("m", "w"))).getId();
+        Long team = surveyService.addQuestion(survey.getId(), section.getId(),
+                new NewQuestion("Which team?", QuestionType.SINGLE_CHOICE, List.of("Red", "Blue"))).getId();
+        surveyService.open(survey.getId());
+        submit(survey.getId(), Map.of(gender, "m", team, "Red"));
+        submit(survey.getId(), Map.of(gender, "m", team, "Blue"));
+        submit(survey.getId(), Map.of(gender, "w", team, "Red"));
+
+        SegmentedReport report = reportService.buildSegmented(survey.getId(), gender);
+
+        assertThat(report.segments()).extracting(SegmentedReport.Segment::label, SegmentedReport.Segment::responseCount)
+                .containsExactly(org.assertj.core.api.Assertions.tuple("m", 2),
+                        org.assertj.core.api.Assertions.tuple("w", 1));
+        // The team question carries one cell per segment, aligned with report.segments().
+        SegmentedReport.Question teamReport = report.sections().get(0).questions().get(1);
+        assertThat(teamReport.questionId()).isEqualTo(team);
+        assertThat(teamReport.cells().get(0).report().distribution())
+                .extracting(DistributionEntry::label, DistributionEntry::count)
+                .containsExactlyInAnyOrder(org.assertj.core.api.Assertions.tuple("Red", 1L),
+                        org.assertj.core.api.Assertions.tuple("Blue", 1L));
+        assertThat(teamReport.cells().get(1).report().distribution())
+                .extracting(DistributionEntry::label, DistributionEntry::count)
+                .containsExactly(org.assertj.core.api.Assertions.tuple("Red", 1L));
+    }
+
+    @Test
+    void suppressesSegmentsBelowTheAnonymityThreshold() {
+        Survey survey = surveyService.createSurvey(MANAGER, new CreateSurveyRequest("S", "d", 2, null));
+        Section section = surveyService.addSection(survey.getId(), "General");
+        Long gender = surveyService.addQuestion(survey.getId(), section.getId(),
+                new NewQuestion("Gender?", QuestionType.SINGLE_CHOICE, List.of("m", "w"))).getId();
+        surveyService.open(survey.getId());
+        submit(survey.getId(), Map.of(gender, "m"));
+        submit(survey.getId(), Map.of(gender, "m"));
+        submit(survey.getId(), Map.of(gender, "w")); // only one "w": below the threshold of 2
+
+        SegmentedReport report = reportService.buildSegmented(survey.getId(), gender);
+
+        assertThat(report.segments()).extracting(SegmentedReport.Segment::label).containsExactly("m");
+        assertThat(report.suppressedLabels()).containsExactly("w");
+    }
+
+    @Test
+    void filtersTheReportToASingleSegment() {
+        Survey survey = surveyService.createSurvey(MANAGER, new CreateSurveyRequest("S", "d", 1, null));
+        Section section = surveyService.addSection(survey.getId(), "General");
+        Long gender = surveyService.addQuestion(survey.getId(), section.getId(),
+                new NewQuestion("Gender?", QuestionType.SINGLE_CHOICE, List.of("m", "w"))).getId();
+        Long team = surveyService.addQuestion(survey.getId(), section.getId(),
+                new NewQuestion("Which team?", QuestionType.SINGLE_CHOICE, List.of("Red", "Blue"))).getId();
+        surveyService.open(survey.getId());
+        submit(survey.getId(), Map.of(gender, "m", team, "Red"));
+        submit(survey.getId(), Map.of(gender, "m", team, "Blue"));
+        submit(survey.getId(), Map.of(gender, "w", team, "Red"));
+
+        SurveyReport report = reportService.buildFiltered(survey.getId(), gender, "m");
+
+        // Only the two "m" responses are counted; the "w" response is excluded.
+        assertThat(report.responseCount()).isEqualTo(2);
+        QuestionReport teamReport = report.sections().get(0).questions().get(1);
+        assertThat(teamReport.questionId()).isEqualTo(team);
+        assertThat(teamReport.distribution())
+                .extracting(DistributionEntry::label, DistributionEntry::count)
+                .containsExactlyInAnyOrder(org.assertj.core.api.Assertions.tuple("Red", 1L),
+                        org.assertj.core.api.Assertions.tuple("Blue", 1L));
+    }
+
+    @Test
+    void filteringRefusesASegmentBelowTheAnonymityThreshold() {
+        Survey survey = surveyService.createSurvey(MANAGER, new CreateSurveyRequest("S", "d", 2, null));
+        Section section = surveyService.addSection(survey.getId(), "General");
+        Long gender = surveyService.addQuestion(survey.getId(), section.getId(),
+                new NewQuestion("Gender?", QuestionType.SINGLE_CHOICE, List.of("m", "w"))).getId();
+        surveyService.open(survey.getId());
+        submit(survey.getId(), Map.of(gender, "m"));
+        submit(survey.getId(), Map.of(gender, "m"));
+        submit(survey.getId(), Map.of(gender, "w")); // only one "w": below the threshold of 2
+
+        assertThatThrownBy(() -> reportService.buildFiltered(survey.getId(), gender, "w"))
+                .isInstanceOf(SurveyStateException.class);
+    }
+
+    @Test
+    void segmentValuesAreTheQuestionsOptions() {
+        Survey survey = surveyService.createSurvey(MANAGER, new CreateSurveyRequest("S", "d", 1, null));
+        Section section = surveyService.addSection(survey.getId(), "General");
+        Long gender = surveyService.addQuestion(survey.getId(), section.getId(),
+                new NewQuestion("Gender?", QuestionType.SINGLE_CHOICE, List.of("m", "w"))).getId();
+
+        assertThat(reportService.segmentValues(survey.getId(), gender)).containsExactly("m", "w");
+    }
+
+    @Test
+    void onlySingleChoiceQuestionsCanSegment() {
+        Survey survey = surveyService.createSurvey(MANAGER, new CreateSurveyRequest("S", "d", 1, null));
+        Section section = surveyService.addSection(survey.getId(), "General");
+        Long gender = surveyService.addQuestion(survey.getId(), section.getId(),
+                new NewQuestion("Gender?", QuestionType.SINGLE_CHOICE, List.of("m", "w"))).getId();
+        surveyService.addQuestion(survey.getId(), section.getId(),
+                new NewQuestion("Anything else?", QuestionType.TEXT, List.of()));
+
+        assertThat(reportService.segmentationOptions(survey.getId()))
+                .extracting(SegmentationOption::questionId).containsExactly(gender);
+    }
+
     /** Distributes one invitation and submits the given answer using the emailed one-time code. */
     private void submit(Long surveyId, Long questionId, String value) {
+        submit(surveyId, Map.of(questionId, value));
+    }
+
+    /** Distributes one invitation and submits one answer per (questionId, value) entry. */
+    private void submit(Long surveyId, Map<Long, String> answers) {
         surveyService.distributeInvitations(surveyId, List.of("p@example.com"));
-        surveyService.submitResponse(surveyId, lastCode(),
-                new ResponseSubmission(List.of(new AnswerSubmission(questionId, List.of(value)))));
+        List<AnswerSubmission> submissions = answers.entrySet().stream()
+                .map(entry -> new AnswerSubmission(entry.getKey(), List.of(entry.getValue())))
+                .toList();
+        surveyService.submitResponse(surveyId, lastCode(), new ResponseSubmission(submissions));
     }
 
     private String lastCode() {

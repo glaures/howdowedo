@@ -25,9 +25,14 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * One-off seeder that creates a survey from a tab-separated seed file on the classpath
- * ({@code section<TAB>question} per line). It builds the survey as a DRAFT via the regular domain
- * services, so a manager can review and open it, using a shared 5-point agreement scale.
+ * One-off seeder that creates a survey from a tab-separated seed file on the classpath. It builds the
+ * survey as a DRAFT via the regular domain services, so a manager can review and open it.
+ *
+ * <p>The file's first row holds column headers and is skipped. Each subsequent row is one question
+ * with the columns: {@code mandatory-flag<TAB>section<TAB>question<TAB>type<TAB>choice...}. A
+ * non-blank first column marks the question mandatory (blank = optional). The type is either
+ * {@code Agreement} - rendered as a shared 5-point agreement {@link QuestionType#SCALE} - or
+ * {@code Single Choice}, whose options are the remaining columns of the row.
  *
  * <p>The seed file holds the actual questions and is intentionally <em>not</em> part of the
  * repository (it may contain confidential, organisation-specific content). If the file is absent the
@@ -92,23 +97,29 @@ public class SurveySeeder implements CommandLineRunner {
 
         Map<String, Integer> scores = scoreByLabel();
         ensureScale(scores);
-        Map<String, List<String>> questionsBySection = readSeed(resource);
+        List<SeedQuestion> seedQuestions = readSeed(resource);
 
         Survey survey = surveyService.createSurvey(owner.getId(),
                 new CreateSurveyRequest(SURVEY_TITLE, SURVEY_DESCRIPTION, MIN_RESPONSES_FOR_RESULTS, null));
 
-        int questionCount = 0;
-        for (Map.Entry<String, List<String>> entry : questionsBySection.entrySet()) {
-            Section section = surveyService.addSection(survey.getId(), entry.getKey());
-            for (String text : entry.getValue()) {
-                // Snapshot the per-option scores into the question so the report can compute favorability.
-                surveyService.addQuestion(survey.getId(), section.getId(),
-                        new NewQuestion(text, QuestionType.SCALE, SCALE_VALUES, true, scores));
-                questionCount++;
-            }
+        Map<String, Section> sections = new LinkedHashMap<>();
+        for (SeedQuestion sq : seedQuestions) {
+            Section section = sections.computeIfAbsent(sq.section(),
+                    title -> surveyService.addSection(survey.getId(), title));
+            boolean scale = sq.type() == QuestionType.SCALE;
+            // Snapshot the per-option scores into scale questions so the report can compute favorability.
+            surveyService.addQuestion(survey.getId(), section.getId(),
+                    new NewQuestion(sq.text(), sq.type(),
+                            scale ? SCALE_VALUES : sq.choices(),
+                            true, sq.mandatory(), scale ? scores : Map.of()));
         }
         log.info("Survey seeded: '{}' (id={}) with {} sections and {} questions as DRAFT.",
-                SURVEY_TITLE, survey.getId(), questionsBySection.size(), questionCount);
+                SURVEY_TITLE, survey.getId(), sections.size(), seedQuestions.size());
+    }
+
+    /** One parsed seed row. {@code choices} is unused for SCALE questions. */
+    private record SeedQuestion(String section, String text, QuestionType type, boolean mandatory,
+                                List<String> choices) {
     }
 
     /** Prefers an administrator, then any user, as the survey author. */
@@ -136,9 +147,9 @@ public class SurveySeeder implements CommandLineRunner {
         }
     }
 
-    /** Reads the TSV into an ordered {@code section -> questions} map, preserving file order. */
-    private Map<String, List<String>> readSeed(ClassPathResource resource) throws IOException {
-        Map<String, List<String>> bySection = new LinkedHashMap<>();
+    /** Reads the TSV into an ordered list of questions, preserving file order and skipping the header row. */
+    private List<SeedQuestion> readSeed(ClassPathResource resource) throws IOException {
+        List<SeedQuestion> questions = new ArrayList<>();
         try (BufferedReader reader = new BufferedReader(new InputStreamReader(
                 resource.getInputStream(), StandardCharsets.UTF_8))) {
             String line;
@@ -146,14 +157,30 @@ public class SurveySeeder implements CommandLineRunner {
                 if (line.isBlank()) {
                     continue;
                 }
-                String[] parts = line.split("\t", 2);
-                if (parts.length < 2 || parts[0].isBlank() || parts[1].isBlank()) {
+                String[] parts = line.split("\t", -1);
+                if (parts.length < 4) {
                     continue;
                 }
-                bySection.computeIfAbsent(parts[0].trim(), k -> new ArrayList<>())
-                        .add(parts[1].trim());
+                String section = parts[1].trim();
+                String text = parts[2].trim();
+                // Skip the header row and any incomplete line.
+                if (section.isBlank() || text.isBlank() || section.equalsIgnoreCase("Section")) {
+                    continue;
+                }
+                boolean mandatory = !parts[0].isBlank();
+                if ("Single Choice".equalsIgnoreCase(parts[3].trim())) {
+                    List<String> choices = new ArrayList<>();
+                    for (int i = 4; i < parts.length; i++) {
+                        if (!parts[i].isBlank()) {
+                            choices.add(parts[i].trim());
+                        }
+                    }
+                    questions.add(new SeedQuestion(section, text, QuestionType.SINGLE_CHOICE, mandatory, choices));
+                } else {
+                    questions.add(new SeedQuestion(section, text, QuestionType.SCALE, mandatory, List.of()));
+                }
             }
         }
-        return bySection;
+        return questions;
     }
 }

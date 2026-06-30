@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<body>
+<!-- The visualisation for one question report `q`: favorable bar, distribution or free-text list. -->
+<th:block th:fragment="viz(q)">
+    <!-- Favorable bar for scored scales: negative | neutral | positive, summing to 100% -->
+    <div th:if="${q.visualization.name() == 'FAVORABLE'}" th:with="f=${q.favorable}"
+         class="favorbar"
+         th:title="#{report.favorable.legend(${f.supporters}, ${f.neutral}, ${f.detractors})}">
+        <div class="favorbar-seg favorbar-neg" th:if="${f.detractorPercent > 0}"
+             th:style="'width:' + ${f.detractorPercent} + '%'"
+             th:text="${f.detractorPercent} + '%'">25%</div>
+        <div class="favorbar-seg favorbar-neutral" th:if="${f.neutralPercent > 0}"
+             th:style="'width:' + ${f.neutralPercent} + '%'"
+             th:text="${f.neutralPercent} + '%'">25%</div>
+        <div class="favorbar-seg favorbar-pos" th:if="${f.favorablePercent > 0}"
+             th:style="'width:' + ${f.favorablePercent} + '%'"
+             th:text="${f.favorablePercent} + '%'">50%</div>
+    </div>
+
+    <!-- Distribution: share per option -->
+    <div th:if="${q.visualization.name() == 'DISTRIBUTION'}">
+        <div class="mb-2" th:each="d : ${q.distribution}">
+            <div class="d-flex justify-content-between small">
+                <span th:text="${d.label}">Option</span>
+                <span class="text-muted" th:text="${d.percent} + '% (' + ${d.count} + ')'">0%</span>
+            </div>
+            <div class="progress" role="progressbar" style="height: 8px;">
+                <div class="progress-bar" th:style="'width:' + ${d.percent} + '%'"></div>
+            </div>
+        </div>
+        <p th:if="${q.distribution.isEmpty()}" class="text-muted small mb-0"
+           th:text="#{results.noAnswers}">No answers yet.</p>
+    </div>
+
+    <!-- Free text: list the anonymous answers -->
+    <div th:if="${q.visualization.name() == 'TEXT'}">
+        <ul class="list-group">
+            <li class="list-group-item" th:each="a : ${q.textAnswers}" th:text="${a}">Answer</li>
+            <li class="list-group-item text-muted" th:if="${q.textAnswers.isEmpty()}"
+                th:text="#{results.noAnswers}">No answers yet.</li>
+        </ul>
+    </div>
+</th:block>
+
+<!-- Anonymous free-text comments for question report `q`: collapsible, only shown when there are any. -->
+<th:block th:fragment="comments(q)">
+    <details th:if="${!q.comments.isEmpty()}" class="mt-3">
+        <summary class="small text-muted text-uppercase"
+                 th:text="#{report.comments(${q.comments.size()})}">Comments (0)</summary>
+        <ul class="list-group mt-2">
+            <li class="list-group-item" th:each="c : ${q.comments}" th:text="${c}">Comment</li>
+        </ul>
+    </details>
+</th:block>
+</body>
+</html>

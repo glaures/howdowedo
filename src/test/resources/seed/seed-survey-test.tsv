@@ -1,3 +1,5 @@
-Engagement	I am happy at work
-Engagement	I would recommend this company as a place to work
-Leadership	I trust the leadership team
+	Section	Question	Type	Choices
+mendatory	Engagement	I am happy at work	Agreement
+mendatory	Engagement	I would recommend this company as a place to work	Agreement
+mendatory	Leadership	I trust the leadership team	Agreement
+	About you	What is your gender?	Single Choice	male	female

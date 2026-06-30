@@ -6,9 +6,13 @@ import org.springframework.transaction.annotation.Transactional;
 import sandbox27.howdowedo.survey.Question;
 import sandbox27.howdowedo.survey.QuestionResult;
 import sandbox27.howdowedo.survey.QuestionType;
+import sandbox27.howdowedo.survey.SegmentedSurveyResults;
+import sandbox27.howdowedo.survey.Section;
+import sandbox27.howdowedo.survey.Survey;
 import sandbox27.howdowedo.survey.SurveyResults;
 import sandbox27.howdowedo.survey.SurveyService;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Function;
@@ -30,18 +34,98 @@ public class ReportService {
 
     @Transactional(readOnly = true)
     public SurveyReport build(Long surveyId) {
+        Survey survey = surveyService.get(surveyId);
         SurveyResults results = surveyService.results(surveyId);
+        return new SurveyReport(results.surveyId(), results.title(), results.responseCount(),
+                toSections(results, survey));
+    }
+
+    /**
+     * Builds the same report broken down by the answer to {@code segmentQuestionId}: each question
+     * lines up one {@link SegmentedReport.Cell} per segment that meets the anonymity threshold.
+     */
+    @Transactional(readOnly = true)
+    public SegmentedReport buildSegmented(Long surveyId, Long segmentQuestionId) {
+        Survey survey = surveyService.get(surveyId);
+        SegmentedSurveyResults segmented = surveyService.segmentedResults(surveyId, segmentQuestionId);
+
+        // One full set of section reports per segment; then transpose so each question groups its segments.
+        List<List<SectionReport>> perSegment = segmented.segments().stream()
+                .map(segment -> toSections(segment.results(), survey))
+                .toList();
+
+        List<Section> surveySections = survey.getSections();
+        List<SegmentedReport.Section> sections = new ArrayList<>();
+        for (int s = 0; s < surveySections.size(); s++) {
+            List<Question> questions = surveySections.get(s).getQuestions();
+            List<SegmentedReport.Question> reportQuestions = new ArrayList<>();
+            for (int q = 0; q < questions.size(); q++) {
+                Question question = questions.get(q);
+                List<SegmentedReport.Cell> cells = new ArrayList<>();
+                for (int seg = 0; seg < perSegment.size(); seg++) {
+                    SegmentedSurveyResults.Segment source = segmented.segments().get(seg);
+                    QuestionReport report = perSegment.get(seg).get(s).questions().get(q);
+                    cells.add(new SegmentedReport.Cell(source.label(),
+                            source.results().responseCount(), report));
+                }
+                reportQuestions.add(new SegmentedReport.Question(question.getId(), question.getText(),
+                        question.getType(), cells));
+            }
+            sections.add(new SegmentedReport.Section(surveySections.get(s).getTitle(), reportQuestions));
+        }
+
+        List<SegmentedReport.Segment> segments = segmented.segments().stream()
+                .map(segment -> new SegmentedReport.Segment(segment.label(),
+                        segment.results().responseCount()))
+                .toList();
+
+        return new SegmentedReport(survey.getId(), segmented.title(), segmented.responseCount(),
+                new SegmentationOption(segmented.segmentQuestionId(), segmented.segmentQuestionText()),
+                segments, segmented.suppressedLabels(), sections);
+    }
+
+    /**
+     * Builds the overall report restricted to one segment: the responses that answered
+     * {@code segmentQuestionId} with {@code value}. Anonymity (overall and per-segment) is enforced in
+     * {@link SurveyService#filteredResults}.
+     */
+    @Transactional(readOnly = true)
+    public SurveyReport buildFiltered(Long surveyId, Long segmentQuestionId, String value) {
+        Survey survey = surveyService.get(surveyId);
+        SurveyResults results = surveyService.filteredResults(surveyId, segmentQuestionId, value);
+        return new SurveyReport(results.surveyId(), results.title(), results.responseCount(),
+                toSections(results, survey));
+    }
+
+    /** The selectable values (options) of a single-choice segmentation question, in survey order. */
+    @Transactional(readOnly = true)
+    public List<String> segmentValues(Long surveyId, Long segmentQuestionId) {
+        return surveyService.get(surveyId).getQuestions().stream()
+                .filter(q -> q.getId().equals(segmentQuestionId) && q.getType() == QuestionType.SINGLE_CHOICE)
+                .findFirst()
+                .map(Question::getOptions)
+                .orElse(List.of());
+    }
+
+    /** The single-choice questions a report can be segmented by, in survey order. */
+    @Transactional(readOnly = true)
+    public List<SegmentationOption> segmentationOptions(Long surveyId) {
+        return surveyService.get(surveyId).getQuestions().stream()
+                .filter(question -> question.getType() == QuestionType.SINGLE_CHOICE)
+                .map(question -> new SegmentationOption(question.getId(), question.getText()))
+                .toList();
+    }
+
+    /** Mirrors the survey's structure: one report section per survey section, in order. */
+    private List<SectionReport> toSections(SurveyResults results, Survey survey) {
         Map<Long, QuestionResult> resultsById = results.questions().stream()
                 .collect(Collectors.toMap(QuestionResult::questionId, Function.identity()));
-
-        // Mirror the survey's own structure: one report section per survey section, in order.
-        List<SectionReport> sections = surveyService.get(surveyId).getSections().stream()
+        return survey.getSections().stream()
                 .map(section -> new SectionReport(section.getTitle(),
                         section.getQuestions().stream()
                                 .map(question -> toReport(resultsById.get(question.getId()), question))
                                 .toList()))
                 .toList();
-        return new SurveyReport(results.surveyId(), results.title(), results.responseCount(), sections);
     }
 
     private QuestionReport toReport(QuestionResult result, Question question) {

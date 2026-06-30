@@ -6,12 +6,15 @@ import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 
 import sandbox27.howdowedo.survey.Survey;
 import sandbox27.howdowedo.survey.SurveyAccessService;
 import sandbox27.howdowedo.survey.SurveyPermission;
 import sandbox27.howdowedo.survey.SurveyService;
 import sandbox27.howdowedo.user.CurrentUser;
+
+import java.util.List;
 
 /**
  * Visual reporting for a survey. Requires the {@link SurveyPermission#ANALYZE} right on the survey;
@@ -35,13 +38,32 @@ public class ReportController {
     }
 
     @GetMapping
-    public String report(Authentication authentication, @PathVariable Long id, Model model) {
+    public String report(Authentication authentication, @PathVariable Long id,
+                         @RequestParam(name = "segmentBy", required = false) Long segmentBy,
+                         @RequestParam(name = "segmentValue", required = false) String segmentValue, Model model) {
         Long userId = currentUser.require(authentication).getId();
         Survey survey = surveyService.get(id);
         accessService.require(survey, userId, SurveyPermission.ANALYZE);
 
+        List<SegmentationOption> segmentOptions = reportService.segmentationOptions(id);
         model.addAttribute("survey", survey);
-        model.addAttribute("report", reportService.build(id));
+        model.addAttribute("segmentOptions", segmentOptions);
+
+        // Segment only by an offered question; an unknown/stale id falls back to the overall report.
+        if (segmentBy != null && segmentOptions.stream().anyMatch(o -> o.questionId().equals(segmentBy))) {
+            List<String> segmentValues = reportService.segmentValues(id, segmentBy);
+            model.addAttribute("segmentBy", segmentBy);
+            model.addAttribute("segmentValues", segmentValues);
+            // A known value drills into that one segment; otherwise compare all segments side by side.
+            if (segmentValue != null && segmentValues.contains(segmentValue)) {
+                model.addAttribute("segmentValue", segmentValue);
+                model.addAttribute("report", reportService.buildFiltered(id, segmentBy, segmentValue));
+            } else {
+                model.addAttribute("segmented", reportService.buildSegmented(id, segmentBy));
+            }
+        } else {
+            model.addAttribute("report", reportService.build(id));
+        }
         return "report/survey";
     }
 }

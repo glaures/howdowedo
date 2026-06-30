@@ -399,15 +399,111 @@ public class SurveyService {
     @Transactional(readOnly = true)
     public SurveyResults results(Long surveyId) {
         Survey survey = require(surveyId);
-        long count = responses.countBySurveyIdAndCompletedTrue(surveyId);
-        if (count < survey.getMinResponsesForResults()) {
+        List<SurveyResponse> completed = responses.findBySurveyIdAndCompletedTrue(surveyId);
+        if (completed.size() < survey.getMinResponsesForResults()) {
             throw new SurveyStateException("error.survey.notEnoughResponses",
                     survey.getMinResponsesForResults());
         }
+        return aggregate(survey, completed);
+    }
 
+    /**
+     * Aggregated results split by the answer to a single-choice segmentation question, so segments can
+     * be compared (e.g. answers broken down by the response to a "gender" question).
+     *
+     * <p>The overall anonymity gate applies, and <em>additionally</em> every segment must reach the
+     * threshold on its own: a bucket below it carries no data and is returned only as a suppressed
+     * label, so a small segment can never expose an individual.
+     */
+    @Transactional(readOnly = true)
+    public SegmentedSurveyResults segmentedResults(Long surveyId, Long segmentQuestionId) {
+        Survey survey = require(surveyId);
+        int min = survey.getMinResponsesForResults();
+        Question segmentQuestion = requireSegmentQuestion(survey, segmentQuestionId);
+
+        List<SurveyResponse> completed = responses.findBySurveyIdAndCompletedTrue(surveyId);
+        if (completed.size() < min) {
+            throw new SurveyStateException("error.survey.notEnoughResponses", min);
+        }
+
+        // Bucket responses by their chosen value for the segment question (options first for stable order).
+        Map<String, List<SurveyResponse>> buckets = new LinkedHashMap<>();
+        segmentQuestion.getOptions().forEach(option -> buckets.put(option, new ArrayList<>()));
+        for (SurveyResponse response : completed) {
+            buckets.computeIfAbsent(segmentValue(response, segmentQuestionId), k -> new ArrayList<>())
+                    .add(response);
+        }
+
+        List<SegmentedSurveyResults.Segment> segments = new ArrayList<>();
+        List<String> suppressed = new ArrayList<>();
+        for (Map.Entry<String, List<SurveyResponse>> bucket : buckets.entrySet()) {
+            List<SurveyResponse> group = bucket.getValue();
+            if (group.isEmpty()) {
+                continue; // an option nobody picked: nothing to show, nothing to hide
+            }
+            if (group.size() < min) {
+                suppressed.add(bucket.getKey());
+            } else {
+                segments.add(new SegmentedSurveyResults.Segment(bucket.getKey(), aggregate(survey, group)));
+            }
+        }
+        return new SegmentedSurveyResults(survey.getId(), survey.getTitle(), completed.size(),
+                segmentQuestionId, segmentQuestion.getText(), segments, suppressed);
+    }
+
+    /**
+     * Aggregated results restricted to the responses that answered the single-choice
+     * {@code segmentQuestionId} with {@code value}, so a manager can drill into one segment alone.
+     *
+     * <p>Both the overall and the per-segment anonymity gate apply: if the matching subset is below
+     * {@code minResponsesForResults} it is refused (never shown), so a small segment cannot expose an
+     * individual.
+     */
+    @Transactional(readOnly = true)
+    public SurveyResults filteredResults(Long surveyId, Long segmentQuestionId, String value) {
+        Survey survey = require(surveyId);
+        int min = survey.getMinResponsesForResults();
+        requireSegmentQuestion(survey, segmentQuestionId);
+
+        List<SurveyResponse> completed = responses.findBySurveyIdAndCompletedTrue(surveyId);
+        if (completed.size() < min) {
+            throw new SurveyStateException("error.survey.notEnoughResponses", min);
+        }
+        List<SurveyResponse> group = completed.stream()
+                .filter(response -> segmentValue(response, segmentQuestionId).equals(value))
+                .toList();
+        if (group.size() < min) {
+            throw new SurveyStateException("error.report.segmentTooSmall", min);
+        }
+        return aggregate(survey, group);
+    }
+
+    /** Looks up the segmentation question and verifies it is single-choice (the only segmentable type). */
+    private Question requireSegmentQuestion(Survey survey, Long segmentQuestionId) {
+        Question segmentQuestion = survey.getQuestions().stream()
+                .filter(q -> q.getId().equals(segmentQuestionId))
+                .findFirst()
+                .orElseThrow(() -> new NotFoundException("error.question.notFound", segmentQuestionId));
+        if (segmentQuestion.getType() != QuestionType.SINGLE_CHOICE) {
+            throw new SurveyStateException("error.report.notSegmentable");
+        }
+        return segmentQuestion;
+    }
+
+    /** The response's chosen value for the segment question, or {@code ""} if it was left unanswered. */
+    private String segmentValue(SurveyResponse response, Long segmentQuestionId) {
+        return response.getAnswers().stream()
+                .filter(answer -> !answer.isComment() && answer.getQuestionId().equals(segmentQuestionId))
+                .map(Answer::getValue)
+                .findFirst()
+                .orElse("");
+    }
+
+    /** Tallies the given completed responses into one {@link QuestionResult} per survey question. */
+    private SurveyResults aggregate(Survey survey, List<SurveyResponse> completed) {
         Map<Long, List<String>> answersByQuestion = new LinkedHashMap<>();
         Map<Long, List<String>> commentsByQuestion = new LinkedHashMap<>();
-        for (SurveyResponse response : responses.findBySurveyIdAndCompletedTrue(surveyId)) {
+        for (SurveyResponse response : completed) {
             for (Answer answer : response.getAnswers()) {
                 Map<Long, List<String>> target = answer.isComment() ? commentsByQuestion : answersByQuestion;
                 target.computeIfAbsent(answer.getQuestionId(), k -> new ArrayList<>())
@@ -421,7 +517,7 @@ public class SurveyService {
             List<String> comments = commentsByQuestion.getOrDefault(question.getId(), List.of());
             questionResults.add(toQuestionResult(question, values, comments));
         }
-        return new SurveyResults(survey.getId(), survey.getTitle(), (int) count, questionResults);
+        return new SurveyResults(survey.getId(), survey.getTitle(), completed.size(), questionResults);
     }
 
     private QuestionResult toQuestionResult(Question question, List<String> values, List<String> comments) {
