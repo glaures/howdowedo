@@ -79,6 +79,11 @@ public class SurveyAccessService {
             surveys.findByIdInOrderByCreatedAtDesc(grantedIds).forEach(s -> byId.putIfAbsent(s.getId(), s));
         }
 
+        // Resolve every owner in one query so the list can show who owns each survey.
+        Map<Long, User> ownersById = users.findByIds(
+                byId.values().stream().map(Survey::getCreatedByUserId).distinct().toList())
+                .stream().collect(Collectors.toMap(User::getId, u -> u));
+
         return byId.values().stream()
                 .sorted(Comparator.comparing(Survey::getCreatedAt).reversed())
                 .map(survey -> {
@@ -87,7 +92,8 @@ public class SurveyAccessService {
                     Set<SurveyPermission> p = permissionsFor(survey, userId);
                     SurveyTurnout turnout = new SurveyTurnout(accessCodes.countBySurveyId(survey.getId()),
                             accessCodes.countBySurveyIdAndUsedTrue(survey.getId()));
-                    return new SurveyAccessView(survey, turnout, p.contains(SurveyPermission.ADMINISTER),
+                    return new SurveyAccessView(survey, ownersById.get(survey.getCreatedByUserId()), turnout,
+                            p.contains(SurveyPermission.ADMINISTER),
                             p.contains(SurveyPermission.EDIT), p.contains(SurveyPermission.ANALYZE));
                 })
                 .toList();
@@ -108,14 +114,45 @@ public class SurveyAccessService {
                 .sorted(Comparator.comparing(g -> g.user().getName(), Comparator.nullsLast(String::compareToIgnoreCase)))
                 .toList();
 
-        Set<Long> taken = rows.stream().map(SurveyAccess::getUserId).collect(Collectors.toCollection(java.util.HashSet::new));
-        taken.add(survey.getCreatedByUserId());
-        List<User> candidates = users.findAll().stream()
-                .filter(u -> !taken.contains(u.getId()))
+        List<User> allUsers = users.findAll().stream()
                 .sorted(Comparator.comparing(User::getName, Comparator.nullsLast(String::compareToIgnoreCase)))
                 .toList();
 
-        return new SurveyPermissionsPage(survey, owner, grants, candidates);
+        Set<Long> taken = rows.stream().map(SurveyAccess::getUserId).collect(Collectors.toCollection(java.util.HashSet::new));
+        taken.add(survey.getCreatedByUserId());
+        List<User> candidates = allUsers.stream().filter(u -> !taken.contains(u.getId())).toList();
+
+        // Ownership can be handed to anyone but the current owner (including already-granted users).
+        List<User> ownerCandidates = allUsers.stream()
+                .filter(u -> !u.getId().equals(survey.getCreatedByUserId())).toList();
+
+        return new SurveyPermissionsPage(survey, owner, grants, candidates, ownerCandidates);
+    }
+
+    /**
+     * Hands ownership of a survey to another user. The new owner then implicitly holds every
+     * permission (any delegated grant they had becomes redundant and is removed), while the previous
+     * owner keeps full access as a normal grant so the handover never locks anyone out.
+     */
+    @Transactional
+    public void changeOwner(Long surveyId, Long newOwnerId) {
+        Survey survey = require(surveyId);
+        Long previousOwnerId = survey.getCreatedByUserId();
+        if (newOwnerId.equals(previousOwnerId)) {
+            return; // already the owner: nothing to do
+        }
+        if (users.findById(newOwnerId).isEmpty()) {
+            throw new NotFoundException("error.user.notFound", newOwnerId);
+        }
+
+        // The new owner no longer needs a delegated grant; drop it to keep the "owner has no row" invariant.
+        access.findBySurveyIdAndUserId(surveyId, newOwnerId).ifPresent(access::delete);
+
+        survey.assignOwner(newOwnerId);
+        surveys.save(survey);
+
+        // Preserve the previous owner's access explicitly (they lose their implicit owner rights).
+        setPermissions(surveyId, previousOwnerId, EnumSet.allOf(SurveyPermission.class));
     }
 
     /**

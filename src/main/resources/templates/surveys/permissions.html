@@ -11,15 +11,36 @@
         Grant other users rights on this survey. The creator always keeps all rights.
     </p>
 
-    <!-- Creator: always all rights, never editable -->
-    <div class="card mb-3" th:if="${page.owner != null}">
-        <div class="card-body d-flex justify-content-between align-items-center">
+    <!-- Owner: always all rights, never editable here; ownership can be handed to another user. -->
+    <div class="card mb-3">
+        <div class="card-body d-flex justify-content-between align-items-center" th:if="${page.owner != null}">
             <div>
                 <span class="fw-semibold" th:text="${page.owner.name}">Owner</span>
                 <span class="text-muted small" th:text="${page.owner.email}">email</span>
-                <span class="badge text-bg-primary ms-1" th:text="#{permissions.owner}">Creator</span>
+                <span class="badge text-bg-primary ms-1" th:text="#{permissions.owner}">Owner</span>
             </div>
             <span class="text-muted small" th:text="#{permissions.ownerAllRights}">All rights</span>
+        </div>
+        <!-- Transfer ownership. The previous owner keeps full access as a normal grant. -->
+        <div class="card-body border-top" th:unless="${page.ownerCandidates.isEmpty()}">
+            <form method="post" th:action="@{'/surveys/' + ${survey.id} + '/owner'}"
+                  class="row g-2 align-items-end">
+                <div class="col-md-7">
+                    <label class="form-label small" for="newOwnerId" th:text="#{permissions.changeOwner}">New owner</label>
+                    <select class="form-select form-select-sm" id="newOwnerId" name="newOwnerId" required>
+                        <option value="" th:text="#{permissions.selectUser}">Select a user…</option>
+                        <option th:each="candidate : ${page.ownerCandidates}" th:value="${candidate.id}"
+                                th:text="${candidate.name + ' (' + candidate.email + ')'}">User</option>
+                    </select>
+                </div>
+                <div class="col-md-5 text-end">
+                    <button class="btn btn-sm btn-outline-primary" type="submit"
+                            th:text="#{permissions.changeOwnerButton}">Transfer ownership</button>
+                </div>
+            </form>
+            <p class="small text-muted mt-2 mb-0" th:text="#{permissions.changeOwnerHint}">
+                The previous owner keeps full access.
+            </p>
         </div>
     </div>
 

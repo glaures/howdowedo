@@ -11,15 +11,16 @@ import sandbox27.howdowedo.user.Role;
 
 /**
  * Landing page. Authenticated users are sent straight to the area most useful for their role:
- * survey workers (manager/analyst) to the surveys list, a pure administrator to user administration.
- * Users without any working role stay on a short informational page.
+ * a survey manager to the surveys list, a pure administrator to user administration. Everyone else
+ * (including users merely granted access to individual surveys) stays on a short informational page
+ * and reaches their shared surveys via the navigation.
  */
 @Controller
 public class HomeController {
 
     @GetMapping("/")
     public String home(Authentication authentication, @AuthenticationPrincipal OAuth2User user, Model model) {
-        if (hasRole(authentication, Role.SURVEY_MANAGER) || hasRole(authentication, Role.SURVEY_ANALYST)) {
+        if (hasRole(authentication, Role.SURVEY_MANAGER)) {
             return "redirect:/surveys";
         }
         if (hasRole(authentication, Role.ADMINISTRATOR)) {

@@ -244,6 +244,14 @@ public class SurveyManagementController {
         return "redirect:/surveys/" + id + "/permissions";
     }
 
+    @PostMapping("/{id}/owner")
+    public String changeOwner(Authentication authentication, @PathVariable Long id,
+                              @RequestParam Long newOwnerId) {
+        requireAccess(authentication, id, SurveyPermission.ADMINISTER);
+        accessService.changeOwner(id, newOwnerId);
+        return "redirect:/surveys/" + id + "/permissions";
+    }
+
     /**
      * Builds the question input. TEXT questions carry no options; a chosen scale is snapshotted
      * (labels and, where present, per-option scores); otherwise the typed options win (no scores).

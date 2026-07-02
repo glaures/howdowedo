@@ -158,6 +158,11 @@ public class Survey {
         return createdByUserId;
     }
 
+    /** Transfers ownership to another user; the new owner then implicitly holds every permission. */
+    public void assignOwner(Long userId) {
+        this.createdByUserId = userId;
+    }
+
     public int getMinResponsesForResults() {
         return minResponsesForResults;
     }

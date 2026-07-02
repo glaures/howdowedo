@@ -19,6 +19,7 @@
         <thead>
         <tr>
             <th th:text="#{surveys.col.title}">Title</th>
+            <th th:text="#{surveys.col.owner}">Owner</th>
             <th th:text="#{surveys.col.status}">Status</th>
             <th th:text="#{surveys.col.endDate}">End date</th>
             <th th:text="#{surveys.col.questions}">Questions</th>
@@ -31,6 +32,8 @@
         <tr th:each="entry : ${surveys}"
             th:attr="data-href=${entry.canEdit} ? @{'/surveys/' + ${entry.survey.id}} : null">
             <td th:text="${entry.survey.title}">Title</td>
+            <td th:text="${entry.owner != null} ? ${entry.owner.name} : '—'"
+                th:title="${entry.owner != null} ? ${entry.owner.email} : null">Owner</td>
             <td><span class="badge text-bg-secondary"
                       th:text="#{'surveystatus.' + ${entry.survey.status}}">DRAFT</span></td>
             <td th:text="${entry.survey.endDate} ?: '—'">—</td>

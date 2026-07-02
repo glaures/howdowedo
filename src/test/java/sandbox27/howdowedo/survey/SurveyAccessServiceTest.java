@@ -127,6 +127,70 @@ class SurveyAccessServiceTest {
     }
 
     @Test
+    void accessibleSurveysExposeTheOwner() {
+        User creator = user("creator");
+        survey(creator);
+
+        SurveyAccessView view = accessService.accessibleSurveys(creator.getId()).get(0);
+
+        assertThat(view.owner().getId()).isEqualTo(creator.getId());
+    }
+
+    @Test
+    void permissionsPageOffersEveryOtherUserForOwnerTransfer() {
+        User creator = user("creator");
+        User member = user("member");
+        Survey survey = survey(creator);
+        accessService.setPermissions(survey.getId(), member.getId(), Set.of(SurveyPermission.EDIT));
+
+        SurveyPermissionsPage page = accessService.permissionsPage(survey.getId());
+
+        // Owner candidates include even already-granted users, but never the current owner.
+        assertThat(page.ownerCandidates()).extracting(User::getId)
+                .contains(member.getId()).doesNotContain(creator.getId());
+    }
+
+    @Test
+    void changeOwnerTransfersRightsAndKeepsThePreviousOwner() {
+        User creator = user("creator");
+        User heir = user("heir");
+        Survey survey = survey(creator);
+
+        accessService.changeOwner(survey.getId(), heir.getId());
+
+        Survey updated = surveyService.get(survey.getId());
+        assertThat(updated.getCreatedByUserId()).isEqualTo(heir.getId());
+        // The new owner holds everything implicitly; the previous owner keeps full access as a grant.
+        assertThat(accessService.permissionsFor(updated, heir.getId()))
+                .containsExactlyInAnyOrder(SurveyPermission.values());
+        assertThat(accessService.permissionsFor(updated, creator.getId()))
+                .containsExactlyInAnyOrder(SurveyPermission.values());
+    }
+
+    @Test
+    void changeOwnerDropsTheNewOwnersRedundantGrant() {
+        User creator = user("creator");
+        User heir = user("heir");
+        Survey survey = survey(creator);
+        accessService.setPermissions(survey.getId(), heir.getId(), Set.of(SurveyPermission.EDIT));
+
+        accessService.changeOwner(survey.getId(), heir.getId());
+
+        SurveyPermissionsPage page = accessService.permissionsPage(survey.getId());
+        assertThat(page.owner().getId()).isEqualTo(heir.getId());
+        // The heir is now owner; their old delegated grant row is gone (rights are implicit now).
+        assertThat(page.grants()).extracting(g -> g.user().getId()).doesNotContain(heir.getId());
+    }
+
+    @Test
+    void changeOwnerRejectsAnUnknownUser() {
+        Survey survey = survey(user("creator"));
+
+        assertThatThrownBy(() -> accessService.changeOwner(survey.getId(), 999_999L))
+                .isInstanceOf(NotFoundException.class);
+    }
+
+    @Test
     void accessibleSurveysIncludeTurnoutCounts() {
         User creator = user("creator");
         Survey survey = surveyService.createSurvey(creator.getId(),
