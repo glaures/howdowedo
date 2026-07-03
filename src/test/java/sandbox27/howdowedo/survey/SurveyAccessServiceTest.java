@@ -29,6 +29,8 @@ class SurveyAccessServiceTest {
     @Autowired
     private SurveyAccessService accessService;
     @Autowired
+    private SurveyRepository surveyRepository;
+    @Autowired
     private UserRepository userRepository;
 
     @MockitoBean
@@ -188,6 +190,41 @@ class SurveyAccessServiceTest {
 
         assertThatThrownBy(() -> accessService.changeOwner(survey.getId(), 999_999L))
                 .isInstanceOf(NotFoundException.class);
+    }
+
+    @Test
+    void deletedSurveysDisappearFromTheListButKeepTheirData() {
+        User creator = user("creator");
+        Survey survey = survey(creator);
+
+        surveyService.deleteSurvey(survey.getId());
+
+        assertThat(accessService.accessibleSurveys(creator.getId())).isEmpty();
+        // The row is still present, only flagged as deleted: no data is lost.
+        Survey stored = surveyRepository.findById(survey.getId()).orElseThrow();
+        assertThat(stored.isDeleted()).isTrue();
+    }
+
+    @Test
+    void aDeletedSurveyIsTreatedAsNotFound() {
+        User creator = user("creator");
+        Survey survey = survey(creator);
+        surveyService.deleteSurvey(survey.getId());
+
+        assertThatThrownBy(() -> surveyService.get(survey.getId()))
+                .isInstanceOf(NotFoundException.class);
+    }
+
+    @Test
+    void deletedSurveysAreAlsoHiddenFromUsersItWasSharedWith() {
+        User creator = user("creator");
+        User member = user("member");
+        Survey survey = survey(creator);
+        accessService.setPermissions(survey.getId(), member.getId(), Set.of(SurveyPermission.ANALYZE));
+
+        surveyService.deleteSurvey(survey.getId());
+
+        assertThat(accessService.accessibleSurveys(member.getId())).isEmpty();
     }
 
     @Test

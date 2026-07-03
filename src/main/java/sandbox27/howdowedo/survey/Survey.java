@@ -66,6 +66,11 @@ public class Survey {
     @Column(nullable = false, updatable = false)
     private Instant createdAt;
 
+    /** When the survey was soft-deleted; {@code null} while it is live. Deleted surveys keep all
+     *  their data but are hidden from every list and treated as non-existent by the domain services. */
+    @Column(name = "deleted_at")
+    private Instant deletedAt;
+
     protected Survey() {
         // for JPA
     }
@@ -161,6 +166,17 @@ public class Survey {
     /** Transfers ownership to another user; the new owner then implicitly holds every permission. */
     public void assignOwner(Long userId) {
         this.createdByUserId = userId;
+    }
+
+    public boolean isDeleted() {
+        return deletedAt != null;
+    }
+
+    /** Marks the survey as soft-deleted, keeping all its data. */
+    public void markDeleted() {
+        if (deletedAt == null) {
+            this.deletedAt = Instant.now();
+        }
     }
 
     public int getMinResponsesForResults() {

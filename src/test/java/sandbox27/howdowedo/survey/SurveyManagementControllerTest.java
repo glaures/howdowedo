@@ -265,6 +265,42 @@ class SurveyManagementControllerTest {
     }
 
     @Test
+    void deletingASurveyHidesItFromTheListButKeepsItInTheDatabase() throws Exception {
+        User manager = provisionManager();
+        Survey survey = surveyService.createSurvey(manager.getId(),
+                new CreateSurveyRequest("Doomed", "d", 1, null));
+
+        mockMvc.perform(post("/surveys/{id}/delete", survey.getId())
+                        .with(oauth2Login().authorities(MANAGER)).with(csrf()))
+                .andExpect(status().is3xxRedirection())
+                .andExpect(redirectedUrl("/surveys"))
+                .andExpect(flash().attribute("deletedSurveyTitle", "Doomed"));
+
+        // Gone from the list, but still retrievable as a soft-deleted row.
+        mockMvc.perform(get("/surveys").with(oauth2Login().authorities(MANAGER)))
+                .andExpect(status().isOk())
+                .andExpect(content().string(not(containsString("Doomed"))));
+        assertThat(surveyService.findByCreator(manager.getId())).isEmpty();
+    }
+
+    @Test
+    void deletingASurveyRequiresAdministerRights() throws Exception {
+        User manager = provisionManager();
+        User member = provisionUser("member");
+        Survey survey = surveyService.createSurvey(manager.getId(),
+                new CreateSurveyRequest("Protected", "d", 1, null));
+        // The member may only edit, not administer, so must not be able to delete it.
+        accessService.setPermissions(survey.getId(), member.getId(), Set.of(SurveyPermission.EDIT));
+
+        mockMvc.perform(post("/surveys/{id}/delete", survey.getId())
+                        .with(oauth2Login().authorities(PLAIN_USER)
+                                .attributes(a -> a.put("sub", "member")))
+                        .with(csrf()))
+                .andExpect(status().is3xxRedirection()); // redirected back with an inline "forbidden" error
+        assertThat(surveyService.get(survey.getId()).getId()).isEqualTo(survey.getId()); // not deleted
+    }
+
+    @Test
     void rendersOpenSurveyDetailWithInvitationsAndTurnout() throws Exception {
         User manager = provisionManager();
         Survey survey = surveyService.createSurvey(manager.getId(),

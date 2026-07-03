@@ -252,6 +252,15 @@ public class SurveyManagementController {
         return "redirect:/surveys/" + id + "/permissions";
     }
 
+    @PostMapping("/{id}/delete")
+    public String delete(Authentication authentication, @PathVariable Long id,
+                         RedirectAttributes redirectAttributes) {
+        Survey survey = requireAccess(authentication, id, SurveyPermission.ADMINISTER);
+        redirectAttributes.addFlashAttribute("deletedSurveyTitle", survey.getTitle());
+        surveyService.deleteSurvey(id);
+        return "redirect:/surveys";
+    }
+
     /**
      * Builds the question input. TEXT questions carry no options; a chosen scale is snapshotted
      * (labels and, where present, per-option scores); otherwise the typed options win (no scores).

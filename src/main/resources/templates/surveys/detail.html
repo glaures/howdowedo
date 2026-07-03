@@ -15,6 +15,12 @@
         <a class="btn btn-sm btn-outline-secondary" th:if="${canAdminister}"
            th:href="@{'/surveys/' + ${survey.id} + '/permissions'}"
            th:text="#{permissions.manage}">Permissions</a>
+        <form th:if="${canAdminister}" method="post" class="d-inline"
+              th:action="@{'/surveys/' + ${survey.id} + '/delete'}"
+              th:onsubmit="'return confirm(' + '\'' + #{surveys.deleteConfirm} + '\'' + ')'">
+            <button class="btn btn-sm btn-outline-danger" type="submit"
+                    th:text="#{surveys.delete}">Delete</button>
+        </form>
     </div>
     <p class="text-muted" th:if="${survey.description}" th:text="${survey.description}">Description</p>
 

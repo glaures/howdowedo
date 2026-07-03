@@ -7,9 +7,9 @@ import java.util.List;
 
 public interface SurveyRepository extends JpaRepository<Survey, Long> {
 
-    List<Survey> findByCreatedByUserIdOrderByCreatedAtDesc(Long createdByUserId);
+    List<Survey> findByCreatedByUserIdAndDeletedAtIsNullOrderByCreatedAtDesc(Long createdByUserId);
 
-    List<Survey> findByIdInOrderByCreatedAtDesc(Collection<Long> ids);
+    List<Survey> findByIdInAndDeletedAtIsNullOrderByCreatedAtDesc(Collection<Long> ids);
 
     boolean existsByTitle(String title);
 }

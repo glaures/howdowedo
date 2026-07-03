@@ -65,7 +65,7 @@ public class SurveyService {
 
     @Transactional(readOnly = true)
     public List<Survey> findByCreator(Long createdByUserId) {
-        List<Survey> result = surveys.findByCreatedByUserIdOrderByCreatedAtDesc(createdByUserId);
+        List<Survey> result = surveys.findByCreatedByUserIdAndDeletedAtIsNullOrderByCreatedAtDesc(createdByUserId);
         // Initialise sections and their questions within the session; open-in-view is disabled.
         result.forEach(survey -> survey.getSections().forEach(section -> section.getQuestions().size()));
         return result;
@@ -79,6 +79,15 @@ public class SurveyService {
         survey.getSections().forEach(section ->
                 section.getQuestions().forEach(question -> question.getOptions().size()));
         return survey;
+    }
+
+    /**
+     * Soft-deletes a survey: it is marked as deleted and disappears from every list, but all its data
+     * (questions, responses, grants) is retained. Any later access to it is rejected as "not found".
+     */
+    @Transactional
+    public void deleteSurvey(Long surveyId) {
+        require(surveyId).markDeleted();
     }
 
     /** Adds a titled section to a draft survey. */
@@ -537,6 +546,7 @@ public class SurveyService {
 
     private Survey require(Long surveyId) {
         return surveys.findById(surveyId)
+                .filter(survey -> !survey.isDeleted()) // a soft-deleted survey behaves as if it never existed
                 .orElseThrow(() -> new NotFoundException("error.survey.notFound", surveyId));
     }
 }

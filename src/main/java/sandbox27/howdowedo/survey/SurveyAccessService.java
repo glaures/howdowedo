@@ -72,11 +72,13 @@ public class SurveyAccessService {
     @Transactional(readOnly = true)
     public List<SurveyAccessView> accessibleSurveys(Long userId) {
         Map<Long, Survey> byId = new LinkedHashMap<>();
-        surveys.findByCreatedByUserIdOrderByCreatedAtDesc(userId).forEach(s -> byId.put(s.getId(), s));
+        surveys.findByCreatedByUserIdAndDeletedAtIsNullOrderByCreatedAtDesc(userId)
+                .forEach(s -> byId.put(s.getId(), s));
 
         List<Long> grantedIds = access.findByUserId(userId).stream().map(SurveyAccess::getSurveyId).toList();
         if (!grantedIds.isEmpty()) {
-            surveys.findByIdInOrderByCreatedAtDesc(grantedIds).forEach(s -> byId.putIfAbsent(s.getId(), s));
+            surveys.findByIdInAndDeletedAtIsNullOrderByCreatedAtDesc(grantedIds)
+                    .forEach(s -> byId.putIfAbsent(s.getId(), s));
         }
 
         // Resolve every owner in one query so the list can show who owns each survey.
@@ -185,6 +187,7 @@ public class SurveyAccessService {
 
     private Survey require(Long surveyId) {
         return surveys.findById(surveyId)
+                .filter(survey -> !survey.isDeleted()) // a soft-deleted survey behaves as if it never existed
                 .orElseThrow(() -> new NotFoundException("error.survey.notFound", surveyId));
     }
 }
